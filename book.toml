@@ -1,0 +1,6 @@
+[book]
+authors = ["Troels Henriksen"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Advanced Programming Course Notes"
