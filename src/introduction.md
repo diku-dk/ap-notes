@@ -14,15 +14,17 @@ The text will contain many links to other resources online. Unless
 explicitly indicated, you can consider these to be supplementary,
 rather than required reading.
 
+There is one chapter per week, containing material of relevance to
+that week's teaching activities and assignment.
+
 ## Course Principles
 
 Although the [Course
 Description](https://kurser.ku.dk/course/ndaa09013u/2024-2025)
 contains a rather dry list of learning goals, you may also benefit
-from keeping the following *principles* in mind when perusing the
-course material. They reflect the philosophy behind the course, and
-our rationale for picking the material and constructing the
-assignments.
+from keeping the following *principles* in mind when reading these
+notes. They reflect the philosophy behind the course, and our
+rationale for picking the material and constructing the assignments.
 
 In AP, we study programming methodologies based on the following
 principles.
