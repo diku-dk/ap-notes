@@ -28,7 +28,7 @@ instance (Functor e) => Monad (Free e) where
     where
       h x = x >>= f
 
--- ANCHOR_END: Monad_free
+-- ANCHOR_END: Monad_Free
 
 -- ANCHOR: ReadOp
 data ReadOp r a = ReadOp (r -> a)
