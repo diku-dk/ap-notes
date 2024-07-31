@@ -9,3 +9,7 @@ acquired through other means, for example via textbooks such as
 The notes serve to emphasize the course perspectives, as well as
 contain material that we could not find of sufficient quality and
 brevity elsewhere.
+
+The text will contain many links to other resources online. Unless
+explicitly indicated, you can consider these to be supplementary,
+rather than required reading.
