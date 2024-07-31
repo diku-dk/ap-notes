@@ -1,5 +1,5 @@
 [book]
-authors = ["Troels Henriksen"]
+authors = ["Troels Henriksen", "Ken Friis Larsen"]
 language = "en"
 multilingual = false
 src = "src"
