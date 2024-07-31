@@ -39,7 +39,7 @@ course.
 
 ### Defining `Free`
 
-We will be defining a monad `Free f a` that represents a computation
+We will be defining a monad `Free e a` that represents a computation
 that produces a value of type `a` (like in `IO a`), and `e` describes
 the possible effects. The definition is as follows[^church]:
 
@@ -53,15 +53,15 @@ represents a computation that has finished with a value of type `a`.
 
 The `Free` constructor is more interesting - it represents an
 *effectful* computation. Note how `e` is *applied as a type
-constructor* to a type `Free f a` (which is also the type we are
+constructor* to a type `Free e a` (which is also the type we are
 defining). Intuitively, this constructor encodes the idea of "first do
-the effect `e`, then continue executing a `Free f a`". The meaning of
+the effect `e`, then continue executing a `Free e a`". The meaning of
 "do the effect" will be specified by the *interpretation function* we
 define for the monad (we'll return to this below), and importantly we
 can define multiple different interpretation functions for the same
 monad. This is what allows separation of concerns.
 
-The `f (Free f a)` part merits elaboration, as this is the first time
+The `f (Free e a)` part merits elaboration, as this is the first time
 we have seen a datatype that applies one of its type parameters to
 another type. This is an instance of "higher-rank polymorphism", where
 we abstract not over *types*, but *type constructors*. While this is
@@ -171,7 +171,7 @@ have decoupled the notion of an effect from its interpretation.
 The above skipped ahead quite a bit, as we have yet to show that
 `Free` is actually a `Monad`. Any `Monad` must also be a `Functor` and
 an `Applicative`, so let us start with `Functor`. For a value of type
-`Free f a`, the `Functor` instance will be about transforming the `a`
+`Free e a`, the `Functor` instance will be about transforming the `a`
 part.
 
 ```Haskell
