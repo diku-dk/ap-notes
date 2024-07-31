@@ -62,3 +62,25 @@ focus on the essential principles. This does not mean that the
 techniques we teach in AP to not scale up to large programs; merely
 that we do not have time for you to observe it for yourselves. You
 will just have to use your imagination.
+
+## Why so many interpreters?
+
+Many of the examples, exercises, and assignments in AP will be in the
+context of writing interpreters, type checkers, or parsers for
+programming languages. This is not *solely* because the teachers
+happen to enjoy this aspect of computer science, but rather because
+these domains contain the essence of problems that occur frequently in
+real-world programming.
+
+* **Interpretation** is about making operational decisions and
+  changing state based on program input.
+
+* **Type checking** is input validation.
+
+* **Parsing** is recovering structured information from unstructured
+  input.
+
+For didactical reasons, AP mostly focuses on problems that
+*exclusively* contains these problems (and little "business logic"),
+but the ideas we study are applicable even outside the rather narrow
+niche of implementing programming languages.
