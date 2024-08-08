@@ -1,1 +1,3 @@
 book
+haskell/**/dist-newstyle/
+haskell/**/newdist/

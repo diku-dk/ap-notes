@@ -1,0 +1,48 @@
+cabal-version:      3.4
+name:               genserver
+version:            0.1.0.0
+-- synopsis:
+-- description:
+license:            MIT
+license-file:       LICENSE
+author:             Ken Friis Larsen
+maintainer:         kflarsen@di.ku.dk
+-- copyright:
+category:           Concurrency
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+-- extra-source-files:
+
+common build-directives
+    default-language: Haskell2010
+    build-depends:    base > 4.15 && <5
+    ghc-options:      -O2
+                      -W
+                      -threaded
+
+library
+    import:           build-directives
+    exposed-modules:  Genserver
+    -- other-modules:
+    -- other-extensions:
+    hs-source-dirs:   src
+
+executable counter1
+    import:           build-directives
+    main-is:          Counter.hs
+    -- other-modules:
+    -- other-extensions:
+    build-depends:
+        genserver
+
+    hs-source-dirs:   src-exe
+
+executable counter2
+    import:           build-directives
+    main-is:          Counter2.hs
+    -- other-modules:
+    -- other-extensions:
+    build-depends:
+        genserver
+
+    hs-source-dirs:   src-exe
