@@ -27,7 +27,7 @@ instance Monad (Reader env) where
         Reader f' = f x
      in f' env
 
--- ANCHOR_END: Monad_State
+-- ANCHOR_END: Monad_Reader
 
 -- ANCHOR: State
 newtype State s a = State (s -> (a, s))
