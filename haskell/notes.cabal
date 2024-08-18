@@ -11,9 +11,10 @@ library
     import: common
     hs-source-dirs: .
     build-depends:
-        base
-      , tasty
-      , tasty-hunit
-      , tasty-quickcheck
+                      base
+                  , megaparsec >= 9.6.1
+                  , tasty
+                  , tasty-hunit
+                  , tasty-quickcheck
     exposed-modules:
         Week1Tests

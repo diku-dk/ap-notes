@@ -223,3 +223,12 @@ pBExp = do
             chain $ Or x y,
           pure x
         ]
+
+parseBExp :: String -> Maybe BExp
+parseBExp s = fst <$> runParser p s
+  where
+    p = do
+      space
+      x <- pBExp
+      eof
+      pure x

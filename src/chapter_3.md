@@ -924,6 +924,129 @@ Just (And (Var "x") (Var "y"),"")
 Just (And (And (Var "x") (Var "y")) (Var "z"),"")
 ```
 
+Usually when constructing a parser, we do not expose the raw parser
+functions (such as `pBExp`), but instead define a convenient wrapper
+function, such as the following:
+
+```Haskell
+parseBExp :: String -> Maybe BExp
+parseBExp s = fst <$> runParser p s
+  where
+    p = do
+      space
+      x <- pBExp
+      eof
+      pure x
+```
+
 ### Operator precedence
 
 ## Megaparsec
+
+While the parser library implemented above is fully operational, it
+has serious flaws that leave it unsuitable for production use:
+
+1. It is rather inefficient. This is partially because of the use of
+   `String` as the fundamental type, but mostly because of how
+   `choice` is implemented, which has to keep track of the original
+   input essentially forever, even if backtracking will never become
+   relevant.
+
+2. It produces no error messages, instead simply returning `Nothing`.
+
+While point 1 does not matter much for AP, point 2 makes it very
+difficult to debug your parsers - which is certainly going to have an
+impact. For the exercises and assignments, you will therefore be using
+a state-of-the-art industrial-strength parser combinator library:
+[Megaparsec](https://hackage.haskell.org/package/megaparsec).
+
+The downside of using an industrial parser library such as Megaparsec
+is that is is complicated. It has a rich programming interface and
+more complicated types than what we need in AP. However, a subset of
+Megaparsec's interface is identical to the interface presented above
+(this is not a coincidence), and this is what we will be using in AP.
+
+The facilities we will need are from the
+[`Text.Megaparsec`](https://hackage.haskell.org/package/megaparsec-9.6.1/docs/Text-Megaparsec.html)
+module. Megaparsec is quite well documented, so it may be worth your
+time to skim the documentation, although the information provided here
+is intended to be sufficient for our needs. In Megaparsec, parsers are
+monadic functions in the `Parsec e s` monad, which is itself a
+specialisation of the `ParsecT` monad *transformer* - a concept that
+lies outside of the AP curriculum. The point of this flexibilty is to
+be generic in the underlying *stream type* (e.g. the kind of "string"
+we are parsing), the form that errors can take, and so on. We do not
+need such flexibility, and the first thing we need to do when using
+Megaparsec is to define the following type synonym:
+
+```Haskell
+import Data.Void (Void)
+
+type Parser = Parsec Void String
+```
+
+This states that our `Parser`s will have no special error component,
+and the input will be a `String`.
+
+To run such a `Parser`, we make use of the `runParser` function, which
+in simplified form has this type:
+
+```Haskell
+runParser :: Parser a
+          -> String
+          -> String
+          -> Either (ParseErrorBundle String Void) a
+```
+
+The first `String` is the *filename* of the input, which is used for
+error messages. The second `String` is the actual input. The result is
+either a special error value, or the result of parsing. Note that in
+contrast to our `runParser`, no remainder string is returned. The
+error value can be turned into a human-readable string with the
+function `errorBundlePretty`.
+
+For example, this is how we would define `parseBExp` using Megaparsec.
+The rest of the parser code is completely unchanged:
+
+```Haskell
+parseBExp :: FilePath -> String -> Either String BExp
+parseBExp fname s = case runParser p fname s of
+  Left err -> Left $ errorBundlePretty err
+  Right x -> Right x
+  where
+    p = do
+      space
+      x <- pBExp
+      eof
+      pure x
+```
+
+We are using the `FilePath = String` type synonym in the function type
+to make it clearer which is the filename and which is the input
+string.
+
+It works just as before:
+
+```
+> parseBExp "input" "x and y and z"
+Right (And (And (Var "x") (Var "y")) (Var "z"))
+```
+
+But it can now also produce quite nice error messages:
+
+```
+> either putStrLn print $ parseBExp "input" "x and y and"
+input:1:12:
+  |
+1 | x and y and
+  |            ^
+unexpected end of input
+expecting "false", "not", or "true"
+> either putStrLn print $ parseBExp "input" "x true"
+input:1:3:
+  |
+1 | x true
+  |   ^
+unexpected 't'
+expecting "and", "or", or end of input
+```
