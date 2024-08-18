@@ -1,7 +1,7 @@
 -- Random code related to Week 3
 
-import Control.Monad (ap)
-import Data.Char (isDigit, ord)
+import Control.Monad (ap, void)
+import Data.Char (isAlpha, isDigit, isSpace, ord)
 
 charInteger :: Char -> Integer
 charInteger c = toInteger $ ord c - ord '0'
@@ -76,6 +76,15 @@ instance Monad Parser where
       Nothing -> Nothing
       Just (x, s') -> runParser (g x) s'
 
+instance MonadFail Parser where
+  fail _ = Parser $ \_ -> Nothing
+
+notFollowedBy :: Parser a -> Parser ()
+notFollowedBy (Parser f) = Parser $ \s ->
+  case f s of
+    Nothing -> Just ((), s)
+    _ -> Nothing
+
 satisfy :: (Char -> Bool) -> Parser Char
 satisfy p = Parser $ \s -> case s of
   c : cs ->
@@ -96,6 +105,13 @@ choice (p : ps) = Parser $ \s ->
   case runParser p s of
     Nothing -> runParser (choice ps) s
     Just (x, s') -> Just (x, s')
+
+chunk :: String -> Parser String
+chunk [] = pure ""
+chunk (c : cs) = do
+  void $ satisfy (== c)
+  void $ chunk cs
+  pure $ c : cs
 
 parseDigit :: Parser Integer
 parseDigit = do
@@ -128,3 +144,82 @@ parseTwoIntegers = do
   _ <- satisfy (== ' ')
   y <- parseInteger
   pure (x, y)
+
+space :: Parser ()
+space = do
+  _ <- many $ satisfy isSpace
+  pure ()
+
+lexeme :: Parser a -> Parser a
+lexeme p = do
+  x <- p
+  space
+  pure x
+
+lDecimal :: Parser Integer
+lDecimal = lexeme $ loop 1 . reverse <$> some parseDigit
+  where
+    loop _ [] = 0
+    loop w (d : ds) =
+      d * w + loop (w * 10) ds
+
+pDecimals :: Parser [Integer]
+pDecimals = many lDecimal
+
+data BExp
+  = Lit Bool
+  | Not BExp
+  | And BExp BExp
+  | Or BExp BExp
+  | Var String
+  deriving (Eq, Show)
+
+keywords :: [String]
+keywords = ["not", "true", "false", "and", "or"]
+
+lVar :: Parser String
+lVar = lexeme $ do
+  v <- some $ satisfy isAlpha
+  if False && v `elem` keywords
+    then fail "keyword"
+    else pure v
+
+lKeyword :: String -> Parser ()
+lKeyword s = lexeme $ do
+  void $ chunk s
+  notFollowedBy $ satisfy isAlpha
+
+pBool :: Parser Bool
+pBool =
+  choice
+    [ lKeyword "true" >> pure True,
+      lKeyword "false" >> pure False
+    ]
+
+pBExp2 :: Parser BExp
+pBExp2 =
+  choice
+    [ Lit <$> pBool,
+      Var <$> lVar,
+      do
+        lKeyword "not"
+        Not <$> pBExp
+    ]
+
+pBExp :: Parser BExp
+pBExp = do
+  x <- pBExp2
+  chain x
+  where
+    chain x =
+      choice
+        [ do
+            lKeyword "and"
+            y <- pBExp2
+            chain $ And x y,
+          do
+            lKeyword "or"
+            y <- pBExp2
+            chain $ Or x y,
+          pure x
+        ]

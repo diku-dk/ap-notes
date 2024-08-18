@@ -283,7 +283,24 @@ The parsers and combinators above directly manipulate the parser state
 and use the `Parser` constructor. We say they are *primitive parsers*.
 However, the vast majority of parsers we will write will not be
 primitive, but will instead be built in terms of the primitives, using
-the monadic interface.
+the monadic interface. For example, we can define a derived parser
+that parses an expected string and returns it:
+
+```Haskell
+import Control.Monad (void)
+
+chunk :: String -> Parser String
+chunk [] = pure ""
+chunk (c : cs) = do
+  void $ satisfy (== c)
+  void $ chunk cs
+  pure $ c : cs
+```
+
+```
+> runParser (choice [chunk "foo", chunk "bar"]) "foo"
+Just ("foo","")
+```
 
 ## Using Parser Combinators
 
@@ -392,3 +409,520 @@ understand parser combinators, mind you), compared to the original
 > runParser parseTwoIntegers "123 456"
 Just ((123,456),"")
 ```
+
+We would likely also want to use the `eof` parser to assert that no
+garbage follows the second integer.
+
+## Tokenisation
+
+Syntaxes for programming languages and data formats are usually
+structured in the form of rules for how to combine *tokens* (sometimes
+also called *lexemes*), along with rules for how the tokens are
+formed.
+
+Following the example above, we could consider integers (in the form
+of a nonzero number of decimal digits) to be a token. In many
+languages, tokens can be separated by any number of whitespace
+characters. In the traditional view of parsing, the syntactic analysis
+is preceded by a *lexical analysis* that splits the input into tokens,
+using for example regular expressions. With parser combinators,
+lexical and syntactic analysis is done simultaneously. Yet to
+correctly handle the lexical rules of a language, we must exercise
+significant discipline.
+
+<div class="warning"> Not all languages have straightforward lexical
+rules. Some (such as Python or Haskell) use indentation to structure
+their syntactical rules, others have context-sensitive tokenisation,
+and others allow extensible or user-defined syntaxes. Parser
+combinators can cope with all of these, but for simplicity we stick to
+more well-behaved syntaxes in these notes. </div>
+
+### Whitespace
+
+One core concern is how to handle whitespace. The most common
+convention is that each parser must consume any *trailing* whitespace,
+but can assume that there is no *leading* whitespace. If we
+systematically follow this rule, then we can ensure that we never fail
+to handle whitespace. The exception is the top parser, where we cannot
+assume that the initial input does not have leading whitespace. Still,
+systematically doing anything without mistakes is difficult for
+humans. In the following, we define some simple (but rigid) rules that
+are easy to follow in our code.
+
+First we write a parser that skips any number of whitespace
+characters.
+
+```Haskell
+import Data.Char (isSpace)
+
+space :: Parser ()
+space = do
+  _ <- many $ satisfy isSpace
+  pure ()
+```
+
+Then we write a parser combinator that takes any parser and consumes
+subsequent whitespace:
+
+```Haskell
+lexeme :: Parser a -> Parser a
+lexeme p = do x <- p
+              space
+              pure x
+```
+
+Now we institute a rule: whenever we write a parser that operates at
+the lexical level, it must be of the form
+
+```
+lFoo = lexeme $ ...
+```
+
+and *no other parser than those of this form* is allowed to use
+`lexeme` or `space` directly. The `l` prefix is a mnemonic for
+*lexical* - similarly we will begin prefixing our syntax-level parsers
+with `l`.
+
+For example, this would now be a parser for decimal integers that
+consumes trailing whitespace:
+
+```
+lDecimal :: Integer
+lDecimal = lexeme $ loop 1 . reverse <$> some parseDigit
+  where
+    loop _ [] = 0
+    loop w (d : ds) =
+      d * w + loop (w * 10) ds
+```
+
+Note that we will use `parseDigit` (which does not handle whitespace)
+as a low level building block. We must only use these from within
+`l`-prefixed functions.
+
+Now we can easily a function that parses any number of
+whitespace-separated decimal numbers:
+
+```Haskell
+pDecimals :: Parser [Integer]
+pDecimals = many lDecimal
+```
+
+```
+> runParser pDecimals "123  456   789   "
+Just ([123,456,789],"")
+```
+
+However, we will fail to parse a string with leading whitespace:
+
+
+```
+> runParser pDecimals " 123"
+Just ([]," 123")
+```
+
+The solution is to explicitly skip leading whitespace:
+
+```
+> runParser (space >> pDecimals) " 123"
+Just ([123],"")
+```
+
+We do this *only* in the top level parser - usually in the one that is
+passed immediately to the function that executed the `Parser` monad
+itself.
+
+### Longest match
+
+When lexing the string `"123"`, we see it as a single token `123`
+rather than three tokens `1`, `2`, `3`? The reason for this is that
+most grammars follow the *longest match* (or *maximum munch*) rule:
+each tokens extend as far as possible. This principle has actually
+been baked into the definition of the `many` combinator above, as it
+tries the recursive case before the terminal case. If we instead
+defined `many` like this:
+
+```Haskell
+many :: Parser a -> Parser [a]
+many p =
+  choice
+    [ pure [],
+      (:) <$> p <*> many p
+    ]
+```
+
+Then we would observe the following behaviour:
+
+```
+> runParser lDecimal "123"
+Just (1,"23")
+```
+
+Thus, simply by defining `many` the way we originally did, we obtain
+conventional behaviour.
+
+## A larger example
+
+Let us study a larger example of parsing, including proper
+tokenisation, handling of keywords, and transforming a given grammar
+to make it amenable to parsing.
+
+Consider parsing a language of Boolean expressions, represented by the
+following Haskell datatype.
+
+```Haskell
+data BExp
+  = Lit Bool
+  | Var String
+  | And BExp BExp
+  | Or BExp BExp
+  deriving (Eq, Show)
+```
+
+The concrete syntax will be strings such as `"x"`, `"not x"`, `"x and
+true"`, `"true and y or z`". We write down a grammar in
+[EBNF](https://en.wikipedia.org/wiki/Extended_Backus%E2%80%93Naur_form):
+
+```
+var ::= ? one or more alphabetic characters ? ;
+BExp ::= "true"
+       | "false"
+       | "not" BExp
+       | BExp "and" BExp
+       | BExp "or" BExp ;
+```
+
+The words enclosed in double quotes are *terminals* (tokens). The
+lowercase `var` is also a token, but is defined informally using an
+EBNF comment. We adopt the convention that tokens can be separated by
+whitespace, and that we follow the longest match rule. This is
+strictly speaking an abuse of convention, as the handling of
+whitespace ought also be explicit in the grammar, but it is common to
+leave it out for simplicity.
+
+Note that the grammar does not *exactly* match the Haskell abstract
+syntax tree (AST) definition - in particular, the `"true"` and
+`"false"` cases are combined into a single `Lit` constructor. This is
+quite common, and we will see many cases where superfluous details of
+the form of the concrete syntax are simplified away in the AST.
+
+Our first attempt at parsing Boolean expressions looks like this:
+
+```Haskell
+import Data.Char (isAlpha)
+
+lVar :: Parser String
+lVar = lexeme $ some $ satisfy isAlpha
+
+lTrue :: Parser ()
+lTrue = lexeme $ void $ chunk "true"
+
+lFalse :: Parser ()
+lFalse = lexeme $ void $ chunk "false"
+
+lAnd :: Parser ()
+lAnd = lexeme $ void $ chunk "and"
+
+lOr :: Parser ()
+lOr = lexeme $ void $ chunk "or"
+
+pBool :: Parser Bool
+pBool =
+  choice
+    [ lTrue >> pure True,
+      lFalse >> pure False
+    ]
+
+pBExp :: Parser BExp
+pBExp =
+  choice
+    [ Lit <$> pBool,
+      Var <$> lVar,
+      do
+        x <- pBExp
+        lAnd
+        y <- pBExp
+        pure $ And x y,
+      do
+        x <- pBExp
+        lOr
+        y <- pBExp
+        pure $ Or x y
+    ]
+```
+
+Note now the structure of the code fairly closely matches the
+structure of the grammar. This is is always something we seek to
+aspire to.
+
+### Keywords
+
+Unfortunately, despite looking pretty, it fails to work properly for
+any but trivial cases:
+
+```
+> runParser pBExp "x"
+Just (Var "x","")
+> runParser pBExp "true"
+Just (Lit True,"")
+> runParser pBExp "not x"
+Just (Var "not","x")
+```
+
+The third case doesn't work. How can that be? The reason it goes wrong
+can be seen by trying to parse a variable name:
+
+```
+> runParser lVar "not"
+Just ("not","")
+```
+
+Words such as `not`, `and`, `or`, `true`, and `false` are also valid
+variable names according to our parser. While we forgot to state it
+explicitly in the grammar, our intention is for these words to be
+*keywords* (or *reserved words*), which are not valid as variables. So
+now we add another side condition to the grammar: a `var` must not be
+one of `not`, `and`, `or`, `true`, and `false`. How do we implement
+this in the parser? After all, in `lVar` we cannot know whether we
+will end up reading a keyword until after we are done. We actually
+need to add a new primitive operation to our parser: *explicit
+failure*. We do this by implementing the `MonadFail` type class, which
+requires a single method, `fail :: String -> Parser a`:
+
+```Haskell
+instance MonadFail Parser where
+  fail _ = Parser $ \_ -> Nothing
+```
+
+The argument to `fail` is for an error message, which is not supported
+by our parser definition, so we just throw it away. The result of
+`fail` is a parser that always fails. We can use this to fix our
+definition of `lVar` to explicitly not allow keywords:
+
+```Haskell
+keywords :: [String]
+keywords = ["not", "true", "false", "and", "or"]
+
+lVar :: Parser String
+lVar = lexeme $ do
+  v <- some $ satisfy isAlpha
+  if v `elem` keywords
+    then fail "keyword"
+    else pure v
+```
+
+This shows some of the strength (and danger) of monadic parsing: we
+can intermingle arbitrary Haskell-level decision making with the
+purely syntactical analysis. This allows parser combinators to support
+heinously context-sensitive grammars when necessary, but as mentioned
+above, we will stick to more well-behaved ones in this course.
+
+Now we get the desired behaviour:
+
+```
+> runParser pBExp "not x"
+Just (Var "not","x")
+```
+
+But another case still behaves oddly:
+
+```
+> runParser pBExp "truexx"
+Just (Lit True,"xx")
+```
+
+We don't really want to parse `"truexx"` as the Boolean literal `true`
+followed by some garbage - this is in violation of the longest match
+rule. We can fix this by requiring that a keyword is *not* followed by
+an alphabetic character. This does require us to add a new primitive
+parser to our parsing library (but this is the last one):
+
+```Haskell
+notFollowedBy :: Parser a -> Parser ()
+notFollowedBy (Parser f) = Parser $ \s ->
+  case f s of
+    Nothing -> Just ((), s)
+    _ -> Nothing
+```
+
+The `notFollowedBy` combinator succeeds *only* if the provided parser
+fails (and if so, consumes no input). We can then use this to define a
+combinator for parsing keywords:
+
+```Haskell
+lKeyword :: String -> Parser ()
+lKeyword s = lexeme $ do
+  void $ chunk s
+  notFollowedBy $ satisfy isAlpha
+```
+
+Using `lKeyword`, there is no need for dedicated functions for parsing
+the individual keywords, although you can still use them if you like.
+I prefer using `lKeyword` directly:
+
+```Haskell
+lKeyword :: String -> Parser ()
+lKeyword s = lexeme $ do
+  void $ chunk s
+  notFollowedBy $ satisfy isAlpha
+
+pBool :: Parser Bool
+pBool =
+  choice
+    [ lKeyword "true" >> pure True,
+      lKeyword "false" >> pure False
+    ]
+
+pBExp :: Parser BExp
+pBExp =
+  choice
+    [ Lit <$> pBool,
+      Var <$> lVar,
+      do
+        lKeyword "not"
+        Not <$> pBExp,
+      do
+        x <- pBExp
+        lKeyword "and"
+        y <- pBExp
+        pure $ And x y,
+      do
+        x <- pBExp
+        lKeyword "or"
+        y <- pBExp
+        pure $ Or x y
+    ]
+```
+
+```Haskell
+> runParser pBExp "truexx"
+Just (Var "truexx","")
+```
+
+### Left recursion
+
+We have now implemented tokenisation properly. Unfortunately, our
+parser still does not work:
+
+```
+> runParser pBExp "x and y"
+Just (Var "x","and y")
+```
+
+The reason is the `choice` in `pBExp`. Our definition of `choice`
+takes the *first* parser that succeeds, which is the one that produces
+`Var`, and so it never proceeds to the one for `And`.
+
+<div class="warning">There are ways of implementing parser combinators
+such that the ordering does not matter, which is largely by using a
+list instead of a `Maybe` in the definition of `Parser`. However, this
+will not solve the nontermination problem discussed below.</div>
+
+We can try to fix our parser by changing the order of parsers provided
+to `choice`:
+
+```Haskell
+pBExp :: Parser BExp
+pBExp =
+  choice
+    [ do
+        x <- pBExp
+        lKeyword "and"
+        y <- pBExp
+        pure $ And x y,
+      do
+        x <- pBExp
+        lKeyword "or"
+        y <- pBExp
+        pure $ Or x y,
+      Lit <$> pBool,
+      Var <$> lVar,
+      do
+        lKeyword "not"
+        Not <$> pBExp
+    ]
+```
+
+Unfortunately, now the parser goes into an infinite loop:
+
+```
+> runParser pBExp "x"
+... waiting for a long time ...
+```
+
+The operational reason is that underneath all the monadic syntax
+sugar, our parsers are just recursive Haskell functions. Looking at
+`pBExp`, we see that the very first thing it does is recursively
+invoke `pBExp`. If we look at the EBNF grammar for Boolean
+expressions, we also see that some of the production rules for `BExp`
+start with `BExp`. In the nomenclature of parser theory, this is
+called *left recursion*. The style of Parser combinator library we are
+studying here is equivalent to so-called *recursive descent parsers
+with arbitrary lookahead*, which are known to not support left
+recursion. The solution to this problem is to *left-factorise* the
+grammar to eliminate left-recursion. If you need a refresher on how to
+do this, see [Grammars and parsing with Haskell using parser
+combinators](https://github.com/diku-dk/ap-e2024-pub/blob/main/week3/parsernotes.pdf).
+
+Left-factorising (note that we do not modify the Haskell AST
+definition) provides us with the following grammar:
+
+```
+var ::= ? one or more alphabetic characters ? ;
+BExp2 ::= "true"
+        | "false"
+        | var
+        | "not" BExp ;
+BExp' ::= "and" BExp2 BExp'
+        | "or" BExp2 BExp'
+        | ;
+BExp ::= BExp2 BExo' ;
+```
+
+Note that we have decided that the `and` operator is
+left-associative - meaning that `"x and y and z"` is parsed as `"(x
+and y) and x"` (or would be if our syntax supported parentheses).
+
+A left factorised grammar can be implemented fairly straightforwardly.
+The idea is that parsing a `BExp` consists of initially parsing a
+`BExp2`, followed by a chain of zero or more `and`/`or` clauses.
+
+```Haskell
+pBExp2 :: Parser BExp
+pBExp2 =
+  choice
+    [ Lit <$> pBool,
+      Var <$> lVar,
+      do
+        lKeyword "not"
+        Not <$> pBExp
+    ]
+
+pBExp :: Parser BExp
+pBExp = do
+  x <- pBExp2
+  chain x
+  where
+    chain x =
+      choice
+        [ do
+            lKeyword "and"
+            y <- pBExp
+            chain $ And x y,
+          do
+            lKeyword "or"
+            y <- pBExp
+            chain $ Or x y,
+          pure x
+        ]
+```
+
+```
+> runParser pBExp "x and y"
+Just (And (Var "x") (Var "y"),"")
+> runParser pBExp "x and y and z"
+Just (And (And (Var "x") (Var "y")) (Var "z"),"")
+```
+
+### Operator precedence
+
+## Megaparsec
