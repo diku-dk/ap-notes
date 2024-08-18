@@ -858,13 +858,13 @@ start with `BExp`. In the nomenclature of parser theory, this is
 called *left recursion*. The style of Parser combinator library we are
 studying here is equivalent to so-called *recursive descent parsers
 with arbitrary lookahead*, which are known to not support left
-recursion. The solution to this problem is to *left-factorise* the
-grammar to eliminate left-recursion. If you need a refresher on how to
-do this, see [Grammars and parsing with Haskell using parser
+recursion. The solution to this problem is to rewrite the grammar to
+eliminate left-recursion. If you need a refresher on how to do this,
+see [Grammars and parsing with Haskell using parser
 combinators](https://github.com/diku-dk/ap-e2024-pub/blob/main/week3/parsernotes.pdf).
 
-Left-factorising (note that we do not modify the Haskell AST
-definition) provides us with the following grammar:
+Transforming the grammar (note that we do not modify the Haskell AST
+definition) provides us with the following:
 
 ```
 var ::= ? one or more alphabetic characters ? ;
@@ -882,9 +882,10 @@ Note that we have decided that the `and` operator is
 left-associative - meaning that `"x and y and z"` is parsed as `"(x
 and y) and x"` (or would be if our syntax supported parentheses).
 
-A left factorised grammar can be implemented fairly straightforwardly.
-The idea is that parsing a `BExp` consists of initially parsing a
-`BExp2`, followed by a chain of zero or more `and`/`or` clauses.
+A grammar without left-recursion can be implemented fairly
+straightforwardly. The idea is that parsing a `BExp` consists of
+initially parsing a `BExp2`, followed by a chain of zero or more
+`and`/`or` clauses.
 
 ```Haskell
 pBExp2 :: Parser BExp
