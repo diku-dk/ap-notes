@@ -131,3 +131,126 @@ unit test suite
      but got: 1
     Use -p '$0=="unit test suite.should work"' to rerun this test only.
 ```
+
+## Useful types
+
+This section discusses various useful Haskell types that are available
+in the base library, as well as common functions on those types. We
+will make use of some of these types in the later chapters.
+
+### `Maybe`
+
+The `Maybe` type is available in the Prelude (the module that is
+implicitly imported in every Haskell program), but has the following
+definition:
+
+```Haskell
+data Maybe a = Nothing
+             | Just a
+```
+
+A value of type `Maybe a` is either `Nothing`, representing the
+absence of a value, or `Just x` for some value `x` of type `a`. It is
+often called the *option type*, and serves roughly the same role as
+the `null` value in poorly designed languages, but in contrast to
+`null` is visible in the type system.
+
+It is often used to represent an operation that can fail. For example,
+we can imagine a function of type
+
+```Haskell
+integerFromString :: String -> Maybe Int
+```
+
+that tries to turn a `String` into an `Integer`, and either returns
+`Nothing`, indicating that the `String` is malformed, or `Just x`,
+where `x` is the corresponding integer. We will return to this in
+[Week 3](./chapter_3.md).
+
+One useful function for operating on `Maybe` values is the `maybe`
+function:
+
+```Haskell
+maybe :: b -> (a -> b) -> Maybe a -> b
+```
+
+It accepts a value that is returned in the `Nothing` case, and
+otherwise a function that is applied to the value in the `Just` case.
+It is equivalent to pattern matching, but is more concise.
+
+Another function, which we must import from the
+[Data.Maybe](https://hackage.haskell.org/package/base-4.20.0.1/docs/Data-Maybe.html)
+module, is `fromMaybe`:
+
+```Haskell
+fromMaybe :: a -> Maybe a -> a
+```
+
+It turns a `Maybe a` into an `a` by providing a default value:
+
+```Haskell
+> fromMaybe 0 Nothing
+0
+> fromMaybe 0 (Just 1)
+1
+```
+
+Again this is nothing we could not write ourselves using `case`, but
+using these functions can result in neater code.
+
+### `Either`
+
+The `Either` type is available in the Prelude and has this definition:
+
+```Haskell
+data Either a b = Left a
+                | Right b
+```
+
+It is used to represent two different possibilities, with different
+types. In practice, it is often used to represent functions that can
+fail, with the `Left` constructor used to represent information about
+the failure, and the `Right` constructor used to represent success.
+
+A useful function for manipulating `Either` values is `either`:
+
+```Haskell
+either :: (a -> c) -> (b -> c) -> Either a b -> c
+```
+
+### `Void`
+
+The `Void` type must be imported from `Data.Void` and has the
+following definition:
+
+```Haskell
+data Void
+```
+
+This odd-looking type has *no constructors*, meaning there are no
+values of type `Void`. This is admittedly somewhat exotic, but it has
+some uses. For example, if we have a function of type `Int -> Void`,
+we know that this function cannot possibly return, as no value of type
+`Void` can be constructed. This is not really useful for a pure
+function, but if we have an impure function with side-effects, such as
+the infinite loops that are used in servers for reading incoming
+requests (later in the course), then it may be sensible to use a
+`Void` return type to clarify that the function will never terminate.
+
+Another use of `Void` is to eliminate cases in polymorphic types. For
+example, if we have a type `Either Void a`, then we know that the
+`Left` case can never occur. This means we do not need to handle it
+when pattern matching the `Either` type.
+
+<div class="warning">This is strictly not true. Haskell is a lazy
+language, so every value is inhabited by the special value ⊥
+("bottom"), which represents a diverging computation.  Example:
+
+```
+> Left undefined :: Either Void Integer
+Left *** Exception: Prelude.undefined
+```
+
+We will return to laziness later in the course, but it is standard to
+reason about the type-level guarantees of Haskell code as if it were
+eager.</div>
