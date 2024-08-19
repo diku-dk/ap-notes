@@ -12,6 +12,7 @@ import Text.Megaparsec
     runParser,
     satisfy,
     some,
+    try,
   )
 
 type Parser = Parsec Void String
@@ -39,14 +40,14 @@ keywords :: [String]
 keywords = ["not", "true", "false", "and", "or"]
 
 lVar :: Parser String
-lVar = lexeme $ do
+lVar = lexeme $ try $ do
   v <- some $ satisfy isAlpha
   if False && v `elem` keywords
     then fail "keyword"
     else pure v
 
 lKeyword :: String -> Parser ()
-lKeyword s = lexeme $ do
+lKeyword s = lexeme $ try $ do
   void $ chunk s
   notFollowedBy $ satisfy isAlpha
 

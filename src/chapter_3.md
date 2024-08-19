@@ -1006,7 +1006,7 @@ error value can be turned into a human-readable string with the
 function `errorBundlePretty`.
 
 For example, this is how we would define `parseBExp` using Megaparsec.
-The rest of the parser code is completely unchanged:
+The rest of the parser code is (for now) completely unchanged:
 
 ```Haskell
 parseBExp :: FilePath -> String -> Either String BExp
@@ -1025,7 +1025,7 @@ We are using the `FilePath = String` type synonym in the function type
 to make it clearer which is the filename and which is the input
 string.
 
-It works just as before:
+It mostly works just as before:
 
 ```
 > parseBExp "input" "x and y and z"
@@ -1050,3 +1050,54 @@ input:1:3:
 unexpected 't'
 expecting "and", "or", or end of input
 ```
+
+However, some inputs now produce a rather unexpected error:
+
+```
+> either putStrLn print $ parseBExp "input" "truex"
+input:1:5:
+  |
+1 | truex
+  |     ^
+unexpected 'x'
+```
+
+The reason for this is that Megaparsec, for efficiency reasons, does
+not automatically backtrack when a parser fails. Due to the way we
+have ordered our `choice` in `pBExp2`, we will initially try to parse
+the literal `true` with `lKeyword` in `pBool`, which will read the
+input `true`, and then fail due to `notFollowedBy`. However, *the
+input remains read*, which means Megaparsec's implementation of
+`choice` won't even try to the other possibilities in `choice`. The
+way to fix this is to use the `try` combinator, which has this type
+(specialising to our `Parser` monad):
+
+```Haskell
+try :: Parser a -> Parser a
+```
+
+A parser `try p` behaves like `p`, but ensures the the parser state is
+unmodified if `p` fails. We must use it whenever a parser can fail
+*after* successfully consuming input. In this case, we must use it in
+`lVar` and `lKeyword`:
+
+```Haskell
+lVar :: Parser String
+lVar = lexeme $ try $ do
+  v <- some $ satisfy isAlpha
+  if False && v `elem` keywords
+    then fail "keyword"
+    else pure v
+
+lKeyword :: String -> Parser ()
+lKeyword s = lexeme $ try $ do
+  void $ chunk s
+  notFollowedBy $ satisfy isAlpha
+```
+
+When to use `try` is certainly rather un-intuitive at first, and
+remains fairly subtle for ever. One possibility is to *always* use it
+in the cases we pass to `choice` - this will work, but is inefficient,
+as it makes every `choice` a potential backtracking point. Most
+grammars are designed such that backtracking is only needed for the
+lexical functions.
