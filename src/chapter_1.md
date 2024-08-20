@@ -254,3 +254,113 @@ Left *** Exception: Prelude.undefined
 We will return to laziness later in the course, but it is standard to
 reason about the type-level guarantees of Haskell code as if it were
 eager.</div>
+
+## Type classes
+
+Type classes are Haskell's main way of specifying abstract interfaces
+that can be implemented by concrete types. For example, the predefined
+`Eq` type class is the interface for any type `a` that support
+equality:
+
+```Haskell
+class Eq a where
+  (==) :: a -> a -> Bool
+  (/=) :: a -> a -> Bool
+```
+
+This interface defines two *methods*, `(==)` and `(/=)`, of the
+specified type, which all type classes must implement. The enclosing
+parentheses denote that these are actually the infix operators `==`
+and `/=`.
+
+We can write polymorhic functions that require that the polymorphic
+types implement a type class. This is done by adding a type class
+constraint to the type of the function. For example:
+
+```Haskell
+contains :: (Eq a) => a -> [a] -> Bool
+contains _ [] = False
+contains x (y : ys) = x == y || contains x ys
+```
+
+In the definition of `contains`, we are able to use the `==` method on
+values of type `a`. If we removed the `(Eq a)` constraint from the
+type signature, we would get a type error.
+
+### Implementing an instance
+
+When implementing an *instance* for a type class, we must implement
+all the methods described in the interface.
+
+<div class="warning">Despite the similarity in nomenclature (class,
+instance, method), type classes are completely unrelated to classes in
+object oriented programming, except that both concepts are related to
+specifying interfaces.</div>
+
+For example, if we define our own type for representing a collection
+of programming languages:
+
+```Haskell
+data PL
+  = Haskell
+  | FSharp
+  | Futhark
+  | SML
+  | OCaml
+```
+
+Then we can define an `Eq` instance for `PL` as follows:
+
+```Haskell
+instance Eq PL where
+  Haskell == Haskell = True
+  FSharp == FSharp = True
+  Futhark == Futhark = True
+  SML == SML = True
+  OCaml == OCaml = True
+  _ == _ = False
+
+  x /= y = not $ x == y
+```
+
+In fact, the `Eq` class has a *default method* for `/=` expressed in
+terms of `==`, so we can elide the definition of `/=` in our instance.
+
+Haskell has a handful of built-in type classes. For us, the most
+important of these are `Eq` (equality), `Ord` (ordering), and `Show`
+(converting to text). The Haskell compiler is able to automatically
+*derive* instances for these when defining a datatype:
+
+```Haskell
+data PL
+  = Haskell
+  | FSharp
+  | Futhark
+  | SML
+  | OCaml
+  deriving (Eq, Ord, Show)
+```
+
+This is very convenient, as the definitions of such instances are
+usually very formulaic. You should add `deriving (Eq, Ord, Show)` to
+all datatypes you define.
+
+### Typeclass laws
+
+Type classes are often associated with a set of *laws* that must hold
+for any instance of the type class. For example, instances of `Eq`
+must follow the usual laws we would expect for an equality relation:
+
+* **Reflexivity**: `x == x` = `True`
+* **Symmetry**: `x == y` = `y == x`
+* **Transitivity**: if `x == y && y == z` = `True`, then `x == z` = `True`
+* **Extensionality**: if `x == y` = `True` and `f` is a function whose
+return type is an instance of `Eq`, then `f x == f y` = `True`
+* **Negation**: `x /= y` = `not (x == y)`.
+
+Unfortunately, these laws are not checked by the type system, so we
+must be careful verify that our instances behave correctly. An
+instance that follows the proscribed laws is called *lawful*. The
+instances that are automatically derived by the compiler will always
+be lawful (unless they depend on hand-written instances that are not
+lawful).
