@@ -345,7 +345,7 @@ This is very convenient, as the definitions of such instances are
 usually very formulaic. You should add `deriving (Eq, Ord, Show)` to
 all datatypes you define.
 
-### Typeclass laws
+### Type class laws
 
 Type classes are often associated with a set of *laws* that must hold
 for any instance of the type class. For example, instances of `Eq`
@@ -364,3 +364,123 @@ instance that follows the proscribed laws is called *lawful*. The
 instances that are automatically derived by the compiler will always
 be lawful (unless they depend on hand-written instances that are not
 lawful).
+
+### `Functor`
+
+One of the important standard type classes is `Functor`, which
+abstracts the notion of a "container of values", where we can apply a
+function to transform the contained values. We should not carry this
+metaphor too far, however: some of the types that are instances of
+`Functor` are only "containers" in the loosest of senses. The somewhat
+exotic name `Functor` is inspired by a branch of mathematics called
+*category theory* (as are many other Haskell terms), but we do not
+need to understand category theory in order to understand the
+`Functor` type class:
+
+```Haskell
+class Functor f where
+  fmap :: (a -> b) -> f a -> f b
+```
+
+The `fmap` method specified by `Functor` is essentially a
+generalisation of the `map` we are used to for lists. One interesting
+detail is that `Functor` instances are not defined for *types*, but
+for *type constructors*. See how the `fmap` method turns an `f a` into
+an `f b`, intuitively changing the `a` values to `b` values. That
+means `f` by itself is not a type - it must be *applied* to a type,
+and hence is a type constructor.
+
+This is perhaps a bit easier to understand if we first define our own
+type of linked lists.
+
+```Haskell
+data List a
+  = Nil
+  | Cons a (List a)
+  deriving (Eq, Ord, Show)
+```
+
+Our `List` type is equivalent to Haskell's built-in list type (which
+is already an instance of `Functor`), but without the syntactic sugar.
+We can define a `Functor` instance for `List` as follows:
+
+```Haskell
+instance Functor List where
+  fmap _ Nil = Nil
+  fmap f (Cons x xs) = Cons (f x) (fmap f xs)
+```
+
+#### Functor laws
+
+Any `Functor` instance must obey these laws:
+
+* **Identity**: `fmap id == id`.
+
+* **Composition**: `fmap (f . g) == fmap f . fmap g`.
+
+Intuitively, they say that `fmap` is not allowed to do anything beyond
+applying the provided function. For example, we cannot store a count
+of how many times `fmap` has been applied, or otherwise tweak the
+observable structure of the container that is being `fmap`ed (e.g. by
+reversing the list or some such).
+
+### `Foldable`
+
+Type classes allow us to write functions that are generic and reusable
+in varied contexts. An example of this is the standard class
+[`Foldable`](https://hackage.haskell.org/package/base-4.20.0.1/docs/Prelude.html#t:Foldable),
+which allows us to iterate across all elements of a "container". Its
+true definition looks more complicated than it really is, due to a
+large number of optional methods. The following is an abbreviated (but
+still correct) description of `Foldable`:
+
+```Haskell
+class Foldable t where
+  foldr :: (a -> b -> b) -> b -> t a -> b
+```
+
+That is, we must provide a method `foldr` for iterating across the
+elements of type `a`, while updating an accumulator of type `b`, which
+yields a final accumulator `b`. An instance of `Foldable` for out
+`List` type looks like this:
+
+```Haskell
+instance Foldable List where
+  foldr _ acc Nil = acc
+  foldr f acc (Cons x xs) = f x (foldr f acc xs)
+```
+
+Once a type is an instance of `Foldable`, we can define a remarkable
+number of interesting functions in termss of `foldr` (all of which are
+already defined for you in the Prelude).
+
+For example, we can turn any `Foldable` into a list:
+
+```Haskell
+toList :: (Foldable f) => f a -> [a]
+toList = foldr op []
+  where
+    op x acc = x : acc
+```
+
+```
+> toList (Cons 1 (Cons 2 (Cons 3 Nil)))
+[1,2,3]
+```
+
+Or we can see whether a given element is contained in the collection:
+
+```Haskell
+elem :: (Eq a, Foldable f) => a -> f a -> Bool
+elem needle = foldr op False
+  where
+    op x acc =
+      acc || x == needle
+```
+
+```
+> elem 1 (Cons 1 (Cons 2 (Cons 3 Nil)))
+True
+> elem 4 (Cons 1 (Cons 2 (Cons 3 Nil)))
+False
+```
