@@ -7,6 +7,8 @@ However, monads can also be used as a powerful program structuring
 technique, even for programs that do not directly interact with the
 outside world.
 
+## Applicative Functors
+
 To motivate the value of monads (and some of the supporting
 machinery), consider if we have a value `x :: Maybe Int`. We can see
 such a value as a computation that is either an `Int` or `Nothing`,
@@ -64,8 +66,11 @@ class Functor f => Applicative f where
 The `pure` method injects a pure value into an effectful computation.
 The `(<*>)` method applies a function stored in an applicative functor
 to a value stored in an applicative functor, yielding an applicative
-functor. This sounds (and is) abstract, and is perhaps best understood
-by looking at an example instance:
+functor. Essentially, it is an extension of the notion of `Functor` to
+also allow the function to be in a "container".
+
+This sounds (and is) abstract, and is perhaps best understood by
+looking at an example instance:
 
 ```Haskell
 instance Applicative Maybe where
@@ -90,7 +95,79 @@ instance Applicative Maybe where
 Now we can write `f <*> x` rather than writing out the `case` by hand.
 Even better, this will work not just when `f` and `x` make use of
 `Maybe` specifically, but *any type* that is an applicative functor -
-and as we shall see, that includes every monad.
+and as we shall see, any monad is also an applicative functor.
+
+## Monads
+
+Consider now the case where we have a value `x :: Maybe Int` and a
+function `f :: Int -> Maybe Int`. That is, the function now also has a
+effect - in this case, it can fail.
+
+If we use `fmap f x`, we get something that is well-typed, but the
+result has type `Maybe (Maybe Int)`, which is unlikely to be what we
+desire. What we need is this function:
+
+```Haskell
+maybeBind :: Maybe a -> (a -> Maybe b) -> Maybe b
+maybeBind Nothing _ = Nothing
+maybeBind (Just x) f = f x
+```
+
+The `maybeBind` function passes a value of type `a` to a provided
+function that operates on `a`, but returns a potentially failing
+computation (`Maybe b`). If the original value is `Nothing`, then the
+final result is `Nothing`. We can now write our application as
+
+```Haskell
+maybeBind x f
+```
+
+or using backticks to make the operator infix:
+
+```Haskell
+x `maybeBind` f
+```
+
+The intuition here is "first execute `x`, then apply the pure result
+(if any) to `f`".
+
+It turns out that functions with the same "shape" as `maybeBind` are
+pretty common. For example, we can define a similar one for `Either`,
+where in the type we simply replace `Maybe a` with `Either e a`:
+
+```Haskell
+eitherBind :: Either e a -> (a -> Either e b) -> Either e b
+eitherBind (Left e) _ = (Left e)
+eitherBind (Right x) f = f x
+```
+
+Note that we operate only on the `Right` part of the `Either` value -
+the `Left` part, which usually represents some kind of error case, is
+undisturbed.
+
+We can even define such a function for linked lists:
+
+```Haskell
+listBind :: [a] -> (a -> [b]) -> [b]
+listBind [] _ = []
+listBind (x : xs) f = f x ++ listBind xs f
+```
+
+The type looks a bit different than `maybeBind` and `eitherBind`, but
+that is just because of the syntactic sugar that lets us write `[a]`
+instead of `List a`.
+
+It seems that when we have things that behave a bit like "containers"
+(in a general sense), we can define these "bind" functions that all
+have some similar behaviour. When we observe such similarities, we can
+put them into a typeclass. In this case, the typeclass is `Monad`, and
+the "bind" function is named the much more intuitive and
+easy-to-pronounce `>>=`:
+
+```Haskell
+class Applicative m => Monad m where
+  (>>=) :: m a -> (a -> m b) -> m b
+```
 
 ## The Reader Monad
 

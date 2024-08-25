@@ -1,3 +1,5 @@
+module Week1Classes where
+
 import Prelude hiding (elem)
 
 contains :: (Eq a) => a -> [a] -> Bool
