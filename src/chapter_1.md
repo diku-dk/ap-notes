@@ -242,7 +242,9 @@ example, if we have a type `Either Void a`, then we know that the
 `Left` case can never occur. This means we do not need to handle it
 when pattern matching the `Either` type.
 
-<div class="warning">This is strictly not true. Haskell is a lazy
+~~~admonish warning
+
+This is strictly not true. Haskell is a lazy
 language, so every value is inhabited by the special value ⊥
 ("bottom"), which represents a diverging computation.  Example:
 
@@ -253,7 +255,8 @@ Left *** Exception: Prelude.undefined
 
 We will return to laziness later in the course, but it is standard to
 reason about the type-level guarantees of Haskell code as if it were
-eager.</div>
+eager.
+~~~
 
 ## Type classes
 
@@ -292,10 +295,12 @@ type signature, we would get a type error.
 When implementing an *instance* for a type class, we must implement
 all the methods described in the interface.
 
-<div class="warning">Despite the similarity in nomenclature (class,
+```admonish note
+Despite the similarity in nomenclature (class,
 instance, method), type classes are completely unrelated to classes in
 object oriented programming, except that both concepts are related to
-specifying interfaces.</div>
+specifying interfaces.
+```
 
 For example, if we define our own type for representing a collection
 of programming languages:
@@ -604,7 +609,7 @@ Similar to `Void`, we cannot ever have a value of type `Kilogram`, but
 we can use it at the type level. Specifically, we now define a type
 constructor `Q` for representing a quantity of some unit:
 
-```
+```Haskell
 data Q unit = Q Double
   deriving (Eq, Ord, Show)
 ```
@@ -653,3 +658,21 @@ types do not guarantee the absence of errors - that requires
 techniques outside the scope of our course - they are a very practical
 programming technique, and one of our first examples of fancy use of
 types. We will return to these ideas later in the course.
+
+### Using `newtype`
+
+Instead of using `data`, it is best practice to define `Q` with
+`newtype`:
+
+```Haskell
+newtype Q unit = Q Double
+```
+
+We can use `newtype` whenever we define a datatype with a single
+constructor that has a single-value - intuitively, whenever we simply
+"wrap" an underlying type. The difference between `data` and `newtype`
+are semantically almost nil (and the edge case does not matter for
+this course), but `newtype` is slightly more efficient, as the
+constructor does not exist when the program executes, meaning our use
+of `newtype` carries no performance overhead whatsoever. In contrast,
+a type declared with `data` must store the constructor.

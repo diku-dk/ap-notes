@@ -430,12 +430,14 @@ lexical and syntactic analysis is done simultaneously. Yet to
 correctly handle the lexical rules of a language, we must exercise
 significant discipline.
 
-<div class="warning"> Not all languages have straightforward lexical
+~~~admonish info
+Not all languages have straightforward lexical
 rules. Some (such as Python or Haskell) use indentation to structure
 their syntactical rules, others have context-sensitive tokenisation,
 and others allow extensible or user-defined syntaxes. Parser
 combinators can cope with all of these, but for simplicity we stick to
-more well-behaved syntaxes in these notes. </div>
+more well-behaved syntaxes in these notes.
+~~~
 
 ### Whitespace
 
@@ -812,10 +814,12 @@ The reason is the `choice` in `pBExp`. Our definition of `choice`
 takes the *first* parser that succeeds, which is the one that produces
 `Var`, and so it never proceeds to the one for `And`.
 
-<div class="warning">There are ways of implementing parser combinators
+~~~admonish info
+There are ways of implementing parser combinators
 such that the ordering does not matter, which is largely by using a
 list instead of a `Maybe` in the definition of `Parser`. However, this
-will not solve the nontermination problem discussed below.</div>
+will not solve the nontermination problem discussed below.
+~~~
 
 We can try to fix our parser by changing the order of parsers provided
 to `choice`:
