@@ -484,3 +484,172 @@ True
 > elem 4 (Cons 1 (Cons 2 (Cons 3 Nil)))
 False
 ```
+
+## Phantom Types
+
+In this section we will briefly look at a programming technique that
+uses types to associate extra information with values and expressions,
+without any run-time overhead. As our example, we will consider
+writing a function that implements the kinetic energy formula:
+
+\\[
+E = \frac{1}{2} m v^2
+\\]
+
+Here *m* is the mass of the object, *v* is its velocity, and *E* is
+the resulting kinetic energy. We can represent this easily as a
+Haskell function:
+
+```Haskell
+energy :: Double -> Double -> Double
+energy m v = 0.5 * m * (v ** 2)
+```
+
+However, it is quite easy to mix up which of the two arguments is the
+mass and which is the velocity, given that they have the same types
+(`Double`). To clarify matters, we can define some type synonyms:
+
+```Haskell
+type Mass = Double
+
+type Velocity = Double
+
+type Energy = Double
+
+energy :: Mass -> Velocity -> Energy
+energy m v = 0.5 * m * (v ** 2)
+```
+
+However, type synonyms are just that: *synonyms*. We can use a `Mass`
+whenever a `Velocity` is expected (or an `Energy` for that matter), so
+while the above makes the type of the `energy` function easier to read
+for a human, the type checker will not catch mistakes for us.
+
+Instead, let us try to define *actual* types for representing the
+physical quantities of interest.
+
+```Haskell
+data Mass = Mass Double
+  deriving (Show)
+
+data Velocity = Velocity Double
+  deriving (Show)
+
+data Energy = Energy Double
+  deriving (Show)
+
+energy :: Mass -> Velocity -> Energy
+energy (Mass m) (Velocity v) = Energy (0.5 * m * (v ** 2))
+```
+
+Now we are certainly prevented from screwing up.
+
+```
+> energy (Mass 1) (Velocity 2)
+Energy 2.0
+> energy (Velocity 2) (Mass 1)
+
+<interactive>:54:9-18: error: [GHC-83865]
+    • Couldn't match expected type ‘Mass’ with actual type ‘Velocity’
+    • In the first argument of ‘energy’, namely ‘(Velocity 2)’
+      In the expression: energy (Velocity 2) (Mass 1)
+      In an equation for ‘it’: it = energy (Velocity 2) (Mass 1)
+
+<interactive>:54:22-27: error: [GHC-83865]
+    • Couldn't match expected type ‘Velocity’ with actual type ‘Mass’
+    • In the second argument of ‘energy’, namely ‘(Mass 1)’
+      In the expression: energy (Velocity 2) (Mass 1)
+      In an equation for ‘it’: it = energy (Velocity 2) (Mass 1)
+```
+
+However, this solution is somewhat heavyweight if we want to also
+support operations on the `Mass`, `Velocity`, and `Energy` types.
+After all, from a mathematical (or physical) standpoint, these are all
+*numbers* with units, and we may want to support number-like
+operations on them. Unfortunately, we end up having to implement
+duplicate functions for every type:
+
+```Haskell
+doubleMass :: Mass -> Mass
+doubleMass (Mass x) = Mass (2 * x)
+
+doubleVelocity :: Velocity -> Velocity
+doubleVelocity (Velocity x) = Velocity (2 * x)
+
+doubleEnergy :: Energy -> Energy
+doubleEnergy (Energy x) = Energy (2 * x)
+```
+
+This is not great, and becomes quite messy once we have many functions
+and types. Instead, let us take a step back and consider how
+physicists work with their formulae. Each number is associated with a
+*unit* (joules, kilograms, etc), and the units are tracked across
+calculations to ensure that the operations make sense (you cannot add
+joules and kilograms). This is very much like a type system, but they
+don't do it by inventing new kinds of numbers (well, they do that
+sometimes), but rather by adding a kind of *unit tag* to the numbers.
+
+Haskell allows us to do a very similar thing. First, we define some
+types that *do not have constructors*:
+
+```Haskell
+data Joule
+
+data Kilogram
+
+data MetrePerSecond
+```
+
+Similar to `Void`, we cannot ever have a value of type `Kilogram`, but
+we can use it at the type level. Specifically, we now define a type
+constructor `Q` for representing a quantity of some unit:
+
+```
+data Q unit = Q Double
+  deriving (Eq, Ord, Show)
+```
+
+Note that we do not actually use the type parameter `unit` in the
+right hand side of the definition. It is a *phantom type*, that exists
+only at compile-time, in order to constrain how `Q`s can be used. When
+constructing a value of type `Q`, we can instantiate that `unit` with
+anything we want. For example:
+
+```Haskell
+weightOfUnladenSwallow :: Q Kilogram
+weightOfUnladenSwallow = Q 0.020
+```
+
+We can still make mistakes when we create these values from scratch,
+by providing a nonsense unit:
+
+```Haskell
+speedOfUnladenSwallow :: Q Joule
+speedOfUnladenSwallow = Q 9
+```
+
+But at least we are prevented from mixing unrelated quantities:
+
+```
+> speedOfUnladenSwallow == weightOfUnladenSwallow
+
+<interactive>:69:26-47: error: [GHC-83865]
+    • Couldn't match type ‘Kilogram’ with ‘Joule’
+      Expected: Q Joule
+        Actual: Q Kilogram
+```
+
+Now we can define a safe `energy` function:
+
+```Haskell
+energy :: Q Kilogram -> Q MetrePerSecond -> Q Joule
+energy (Q m) (Q v) = Q (0.5 * m * (v ** 2))
+```
+
+Phantom types are a convenient technique that require only a small
+amount of boilerplate, and can be used to prevent incorrect use of
+APIs. The type errors are usually fairly simple, too. While phantom
+types do not guarantee the absence of errors - that requires
+techniques outside the scope of our course - they are a very practical
+programming technique, and one of our first examples of fancy use of
+types. We will return to these ideas later in the course.

@@ -4,3 +4,6 @@ language = "en"
 multilingual = false
 src = "src"
 title = "Advanced Programming Course Notes"
+
+[output.html]
+mathjax-support = true
