@@ -358,7 +358,8 @@ must follow the usual laws we would expect for an equality relation:
 
 * **Reflexivity**: `x == x` = `True`
 * **Symmetry**: `x == y` = `y == x`
-* **Transitivity**: if `x == y && y == z` = `True`, then `x == z` = `True`
+* **Transitivity**: if `x == y && y == z` = `True`, then `x == z` =
+  `True`
 * **Extensionality**: if `x == y` = `True` and `f` is a function whose
 return type is an instance of `Eq`, then `f x == f y` = `True`
 * **Negation**: `x /= y` = `not (x == y)`.
@@ -497,9 +498,7 @@ uses types to associate extra information with values and expressions,
 without any run-time overhead. As our example, we will consider
 writing a function that implements the kinetic energy formula:
 
-\\[
-E = \frac{1}{2} m v^2
-\\]
+\\[ E = \frac{1}{2} m v^2 \\]
 
 Here *m* is the mass of the object, *v* is its velocity, and *E* is
 the resulting kinetic energy. We can represent this easily as a
@@ -651,13 +650,30 @@ energy :: Q Kilogram -> Q MetrePerSecond -> Q Joule
 energy (Q m) (Q v) = Q (0.5 * m * (v ** 2))
 ```
 
-Phantom types are a convenient technique that require only a small
+And in contrast to before, we can define unit-preserving utility
+functions that apply to any `Q`:
+
+```Haskell
+double :: Q unit -> Q unit
+double (Q x) = Q (2 * x)
+```
+
+Phantom types is a convenient technique that requires only a small
 amount of boilerplate, and can be used to prevent incorrect use of
-APIs. The type errors are usually fairly simple, too. While phantom
+APIs. The type errors are usually fairly simple as well. While phantom
 types do not guarantee the absence of errors - that requires
 techniques outside the scope of our course - they are a very practical
 programming technique, and one of our first examples of fancy use of
 types. We will return to these ideas later in the course.
+
+~~~admonish note
+
+A full expression of the SI system of measures in a type system,
+including a proper handling of compound units such as m/s, requires
+type-level programming beyond ismply using phantom types, and are
+beyond the scope of this course.
+
+~~~
 
 ### Using `newtype`
 

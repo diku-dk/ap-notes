@@ -17,3 +17,6 @@ speedOfUnladenSwallow = Q 9
 
 energy :: Q Kilogram -> Q MetrePerSecond -> Q Joule
 energy (Q m) (Q v) = Q (0.5 * m * (v ** 2))
+
+double :: Q unit -> Q unit
+double (Q x) = Q (2 * x)
