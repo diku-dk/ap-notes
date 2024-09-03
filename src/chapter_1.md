@@ -30,7 +30,7 @@ corresponding *test module* called `Foo_Tests`. Each test module
 defines a test suite named `test`, which in Tasty is of type
 `TestTree`. We will see below how to define these.
 
-To run the tests for an entire project, we write *test runner*, which
+To run the tests for an entire project, we write a *test runner*, which
 we will normally call `runtests.hs`. This test runner will import the
 various `TestTrees`, combine them if necessary, and pass them to the
 `defaultMain` function provided by Tasty. When the program is run,
