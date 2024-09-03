@@ -32,7 +32,7 @@ defines a test suite named `test`, which in Tasty is of type
 
 To run the tests for an entire project, we write a *test runner*, which
 we will normally call `runtests.hs`. This test runner will import the
-various `TestTrees`, combine them if necessary, and pass them to the
+various `TestTree`s, combine them if necessary, and pass them to the
 `defaultMain` function provided by Tasty. When the program is run,
 Tasty will run the test suite and report any errors. If the test
 runner is registered as a test suite in the `.cabal` file, we can use
@@ -113,23 +113,23 @@ equality in a more concise way than using `assertBool`:
 
 ```Haskell
 failingTest2 :: TestTree
-failingTest2 = testCase "should work" $ 1 @?= 2
+failingTest2 = testCase "should not work 2" $ 1 @?= 2
 ```
 
 When run, this will produce output such as the following:
 
 ```
 unit test suite
-  should work:     OK
-  should not work: FAIL
+  should work:       OK
+  should not work:   FAIL
     .../Week1Tests.hs:10:
     1 is not 2
     Use -p '/should not work/' to rerun this test only.
-  should work:     FAIL
+  should not work 2: FAIL
     .../Week1Tests.hs:13:
     expected: 2
      but got: 1
-    Use -p '$0=="unit test suite.should work"' to rerun this test only.
+    Use -p '$0=="unit test suite.should not work 2"' to rerun this test only.
 ```
 
 ## Useful types
@@ -670,7 +670,7 @@ types. We will return to these ideas later in the course.
 
 A full expression of the SI system of measures in a type system,
 including a proper handling of compound units such as m/s, requires
-type-level programming beyond ismply using phantom types, and are
+type-level programming beyond simply using phantom types, and are
 beyond the scope of this course.
 
 ~~~
