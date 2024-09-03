@@ -169,6 +169,43 @@ class Applicative m => Monad m where
   (>>=) :: m a -> (a -> m b) -> m b
 ```
 
+Haskell already provides a `Monad` instance for `Maybe`, but if it did
+not, we would define it as follows:
+
+```Haskell
+instance Monad Maybe where
+  Nothing >>= _ = Nothing
+  Just x >>= f = f x
+```
+
+Note that this definition is equivalent to the `maybeBind` above.
+Indeed, we could also write this definition like so:
+
+```Haskell
+instance Monad Maybe where
+  (>>=) = maybeBind
+```
+
+## Intuition, nomenclature, and slang
+
+Monads when viewed as an abstract interface can be quite tricky to get
+a grasp of. They are so abstract and general that it can be difficult
+to understand what the general concept *means*. One good approach to
+learning is to essentially disregard the general concept, and focus
+only on specific monads. It is not so difficult to understand
+operationally what the `Monad` instances for `Option` and `Either` do,
+and in this we will mostly be working with *specific* monads.
+
+From a pedantic viewpoint, a function `f` of type `a -> m b`, where
+`m` is some monad (such as `Option`), returns a *monadic value* of
+type `m b`. We also sometimes say that it returns a *command in the
+monad `m`* which can produce a value of type `b` when "executed" (this
+term will make a bit more sense for the monads discussed below). We
+often also say that `f` is a *monadic function*. This is technically
+an abuse of nomenclature, but functions that "run within a specific
+monad" are such a common concept in Haskell that terse nomenclature is
+useful.
+
 ## The Reader Monad
 
 ```Haskell
