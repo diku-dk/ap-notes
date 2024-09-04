@@ -86,7 +86,7 @@ And here is one that succeeds:
 
 ```Haskell
 successfulTest :: TestTree
-successfulTest = TestCase "should work" $ assertBool "1 is not 1" $ 1==1
+successfulTest = TestCase "should work" $ assertBool "1 is 1" $ 1==1
 ```
 
 We can combine multiple `TestTree`s with `testGroup`:
