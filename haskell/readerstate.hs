@@ -29,6 +29,29 @@ instance Monad (Reader env) where
 
 -- ANCHOR_END: Monad_Reader
 
+runReader :: env -> Reader env a -> a
+runReader env (Reader f) = f env
+
+ask :: Reader env env
+ask = Reader $ \env -> env
+
+local :: (env -> env) -> Reader env a -> Reader env a
+local f (Reader g) = Reader $ \env -> g (f env)
+
+data Tree
+  = Leaf Int
+  | Inner Tree Tree
+  deriving (Show)
+
+incLeaves :: Tree -> Reader Int Tree
+incLeaves (Leaf x) = do
+  depth <- ask
+  pure $ Leaf $ x + depth
+incLeaves (Inner l r) = do
+  l' <- local (+ 1) $ incLeaves l
+  r' <- local (+ 1) $ incLeaves r
+  pure $ Inner l' r'
+
 -- ANCHOR: State
 newtype State s a = State (s -> (a, s))
 
