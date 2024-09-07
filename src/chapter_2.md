@@ -647,3 +647,23 @@ boilerplate.
 {{#include ../haskell/readerstate.hs:Functor_RS}}
 {{#include ../haskell/readerstate.hs:Applicative_RS}}
 ```
+
+We can then define the following API for `RS`, providing both State
+and Reader-like operations:
+
+```Haskell
+runRS :: env -> s -> RS env s a -> (a, s)
+runRS env state (RS f) = f env state
+
+rsGet :: RS env s s
+rsGet = RS $ \_env state -> (state, state)
+
+rsPut :: s -> RS env s ()
+rsPut state = RS $ \_env _ -> ((), state)
+
+rsAsk :: RS env s env
+rsAsk = RS $ \env state -> (env, state)
+
+rsLocal :: (env -> env) -> RS env s env -> RS env s env
+rsLocal f (RS g) = RS $ \env state -> g (f env) state
+```
