@@ -280,7 +280,13 @@ do x <- foo one_argument
    ...
 ```
 
-## The Reader Monad
+## Examples of defining and using monads
+
+In the following we will look at examples of how to define and use our
+own monads. Most of these correspond to monads that are available and
+commonly used in standard Haskell libraries.
+
+### The Reader Monad
 
 The Reader monad is a commonly used pattern for implicitly passing an
 extra argument to functions. It is often used to maintain
@@ -288,20 +294,170 @@ configuration data or similar context that would be annoyingly verbose
 to handle manually, perhaps because it is not used in all cases of a
 function. We will call this implicit value an *environment*.
 
+Operationally, a Reader monad with environment `env` and producing a
+value of type `a` is represented as a function accepting an `env` and
+returning `a`.
+
 ```Haskell
 {{#include ../haskell/readerstate.hs:Reader}}
 ```
 
-```Haskell
-{{#include ../haskell/readerstate.hs:Monad_Reader}}
-```
+Coming up with a definition of the Reader type itself requires actual
+creativity. On the other hand, the `Functor`/`Applicative`/`Monad`
+instances can almost be derived mechanically. I recommend starting
+with the the following template code:
 
 ```Haskell
-{{#include ../haskell/readerstate.hs:Functor_Reader}}
-{{#include ../haskell/readerstate.hs:Applicative_Reader}}
+instance Functor (Reader env) where
+  fmap = liftM
+
+instance Applicative (Reader env) where
+  (<*>) = ap
+  pure x = undefined
+
+instance Monad (Reader env) where
+  m >>= f = undefined
 ```
 
-## The State Monad
+The `fmap` and `(<*>)` definitions are done, as discussed above. All
+we have to do is fill out the definitions of `pure` and `>>=`. I
+usually start with `pure`, because it is simpler. We start with this:
+
+```Haskell
+pure x = undefined
+```
+
+The `Applicative` class requires that the `pure` instance for `Reader
+env` has type `a -> Reader env a`. This means we know two things:
+
+1. `x :: a`.
+2. The right-hand side (currently `undefined`) must have type `Reader
+   env a`.
+
+Looking at the type definition of `Reader` above, we see that *any*
+value of type `Reader` takes the form of a `Reader` constructor
+followed by a payload. So we write this:
+
+```Haskell
+pure x = Reader undefined
+```
+
+Looking at the definition of `Reader` again, we see that this
+`undefined` must have type `env -> a`.
+
+~~~admonish hint
+
+Instead of using `undefined`, we can also use `_`. This is a so-called
+*hole*, and will cause the compiler to emit an error message
+containing the type of the expression that is supposed to be located at the hole.
+
+~~~
+
+How do we construct a value of type `env -> a`? Well, we have a
+variable of type `a` (namely `x`), so we can simply write an anonymous
+function that ignores its argument (of type `env`) and returns `x`:
+
+```Haskell
+pure x = Reader $ \_env -> x
+```
+
+This concludes the definition of `pure`. We now turn our attention to
+`>>=`. The line of thinking is the same, where we systematically
+consider the types values we have available to us, and the types of
+values we are supposed to construct. This is our starting point:
+
+```Haskell
+m >>= f = undefined
+```
+
+We know:
+
+1. `m :: Reader env a`
+2. `f :: a -> Reader env b`
+3. `undefined :: Reader env b`
+
+We don't have anything of type `a`, so we cannot apply the function
+`f`. One we can do is deconstruct the value `m`, since we know this is
+a single-constructor datatype:
+
+```Haskell
+Reader x >>= f = undefined
+```
+
+Now we have the following information:
+
+
+1. `x :: env -> a`
+2. `f :: a -> Reader env b`
+3. `undefined :: Reader env b`
+
+The values `x` and `f` are functions for which we do not have values
+of the required argument type, so we cannot do anything to. But we can
+still start adding a constructor to the right-hand side, just as we
+did above for `pure`:
+
+```Haskell
+Reader x >>= f = Reader undefined
+```
+
+And again, we know that the `undefined` here must be a function taking
+an `env` as argument:
+
+```Haskell
+Reader x >>= f = Reader $ \env -> undefined
+```
+
+So far we have not used any creativity. We have simply done the only
+things possible given the structure of the types we have available.
+We now have this:
+
+1. `x :: env -> a`
+2. `f :: a -> Reader env b`
+3. `env :: env`
+3. `undefined :: b`
+
+Since we now have a variable of type `env`, we can apply the function
+`x`. We do so:
+
+```Haskell
+Reader x >>= f = Reader $ \env ->
+                   let x' = x env
+                   in undefined
+```
+
+Now we have `x' :: a`, which allows us to apply the function `f`:
+
+```Haskell
+Reader x >>= f = Reader $ \env ->
+                   let x' = x env
+                   let f' = f env
+                   in undefined
+```
+
+We have `f' :: Reader env b`, so we can pattern match on `f'` to
+extract the payload. When a type has only a single constructor, we can
+do this directly in `let`, without using `case`:
+
+```Haskell
+Reader x >>= f = Reader $ \env ->
+                   let x' = x env
+                   let Reader f' = f env
+                   in undefined
+```
+
+Now we have `f' :: b`, which is exactly what we need to finish the
+definition:
+
+```Haskell
+Reader x >>= f = Reader $ \env ->
+                   let x' = x env
+                   let Reader f' = f env
+                   in f'
+```
+
+This finishes the `Monad` instance for `Reader`.
+
+### The State Monad
 
 ```Haskell
 {{#include ../haskell/readerstate.hs:State}}
@@ -316,7 +472,7 @@ function. We will call this implicit value an *environment*.
 {{#include ../haskell/readerstate.hs:Applicative_State}}
 ```
 
-## Combining Reader and State
+### Combining Reader and State
 
 One limitation of monads - in particular the simple form we study in
 AP - is that they do not compose well. We cannot in general take two
