@@ -455,7 +455,89 @@ Reader x >>= f = Reader $ \env ->
                    in f'
 ```
 
-This finishes the `Monad` instance for `Reader`.
+This finishes the `Monad` instance for `Reader`. However, we still
+need to define the programming interface for the monad. Some monads
+(such as `Maybe`, `Either`, or lists) directly expose their type
+definition. But for more effect-oriented monads like `Reader`, we
+usually want to hide their definition and instead provide an abstract
+interface. This usually takes the form of a function for executing a
+monadic computation, as well as various functions for constructing
+monadic computations. For `Reader`, we will implement the following
+interface:
+
+```Haskell
+runReader :: env -> Reader env a -> a
+
+ask :: Reader env env
+
+local :: (env -> env) -> Reader env a -> Reader env a
+```
+
+The `runReader` function is used to execute a `Reader` computation,
+given an initial environment. It has the following definition:
+
+```Haskell
+runReader env (Reader f) = f env
+```
+
+The `ask` command is used to retrieve the environment. It has the
+following definition:
+
+```Haskell
+ask = Reader $ \env -> env
+```
+
+The `local` function executes a given `Reader` command in a modified
+environment. This does not allow stateful mutation, as the environment
+is only modified while executing the provided command, not any
+subsequent ones:
+
+```Haskell
+local f (Reader g) = Reader $ \env -> g (f env)
+```
+
+#### Using the Reader Monad
+
+The `Reader` monad is mostly useful when writing functions with many
+cases, where only some need to make use of the environment. This means
+compelling examples are relatively verbose. You will see such examples
+in the course exercises, but for now, we will use a somewhat contrived
+example of modifying a binary tree of integers, such that every node
+is incremented with its distance from the root.
+
+First we define the datatype.
+
+```Haskell
+data Tree
+  = Leaf Int
+  | Inner Tree Int Tree
+  deriving (Show)
+```
+
+```
+> (Leaf 0 `Inner` Leaf 0) `Inner` Leaf 0
+Inner (Inner (Leaf 0) (Leaf 0)) (Leaf 0)
+```
+
+Then we can define a monadic recursive function over `Tree`:
+
+```Haskell
+incLeaves :: Tree -> Reader Int Tree
+incLeaves (Leaf x) = do
+  depth <- ask
+  pure $ Leaf $ x + depth
+incLeaves (Inner l r) = do
+  l' <- local (+ 1) $ incLeaves l
+  r' <- local (+ 1) $ incLeaves r
+  pure $ Inner l' r'
+```
+
+And then we can run our contrived function on some provided tree:
+
+```
+> runReader 0 $ incLeaves $ (Leaf 0 `Inner` Leaf 0) `Inner` Leaf 0
+Inner (Inner (Leaf 2) (Leaf 2)) (Leaf 1)
+```
 
 ### The State Monad
 
