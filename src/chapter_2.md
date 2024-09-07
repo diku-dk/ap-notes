@@ -206,7 +206,87 @@ an abuse of nomenclature, but functions that "run within a specific
 monad" are such a common concept in Haskell that terse nomenclature is
 useful.
 
+## Deriving `fmap` and `<*>`
+
+It turns out that when some type is an instance of `Monad`, the `fmap`
+and `<*>` methods from `Functor` and `Applicative` can be expressed in
+terms of `>>=` and `pure`. This means that when we implement this
+trifecta of instances, we only really have to think about `>>=` and
+`pure`. Specifically, we can define a function `liftM` that behaves
+like `fmap` for any monad:
+
+```Haskell
+liftM :: Monad m => (a -> b) -> m a -> m b
+liftM f x = x >>= \x' -> pure (f x')
+```
+
+And similarly a function `ap` that behaves like `<*>`:
+
+```Haskell
+ap :: m (a -> b) -> m a -> m b
+ap f x = f >>= \f' ->
+         x >>= \x' ->
+           pure (f' x')
+```
+
+It can be shown that these are actually the only law-abiding
+definitions for these functions. Further, these functions are
+available from the builtin `Control.Monad` module. This means that
+when defining the instances for `Maybe`, we can take the following
+shortcuts:
+
+```Haskell
+import Control.Monad (liftM, ap)
+
+instance Applicative Maybe where
+  (<*>) = ap
+
+instance Functor Maybe where
+  fmap = liftM
+```
+
+## `do`-notation
+
+Monads are particularly ergonomic to use in Haskell, and the main
+reason for this is a bit of syntactic sugar called `do`-notation,
+which allows us to imitate imperative programming.
+
+Roughly speaking, the keyword `do` begins a block wherein every line
+corresponds to a monadic action, with the actions combined with `>>=`,
+and each statement after the first beginning a lambda. As an example,
+
+```Haskell
+do x <- foo
+   y <- bar
+   baz x y
+```
+
+is syntactic sugar for
+
+```Haskell
+foo >>=
+(\x -> bar >>=
+ (\y -> baz x y))
+```
+
+We can break a single statement over multiple lines if we are careful
+about how we indent them: the continuation lines must be indented more
+deeply than the first:
+
+```Haskell
+do x <- foo one_argument
+          more arguments...
+   y <- x
+   ...
+```
+
 ## The Reader Monad
+
+The Reader monad is a commonly used pattern for implicitly passing an
+extra argument to functions. It is often used to maintain
+configuration data or similar context that would be annoyingly verbose
+to handle manually, perhaps because it is not used in all cases of a
+function. We will call this implicit value an *environment*.
 
 ```Haskell
 {{#include ../haskell/readerstate.hs:Reader}}
