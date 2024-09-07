@@ -541,17 +541,75 @@ Inner (Inner (Leaf 2) (Leaf 2)) (Leaf 1)
 
 ### The State Monad
 
+The State monad is similar to the Reader monad, except now we allow
+subsequent commands to modify the state. We represent a stateful
+computation as a function that accepts a state (of some abstract type
+`s`) and returns a new state, along with a value.
+
 ```Haskell
 {{#include ../haskell/readerstate.hs:State}}
 ```
+
+The definitions of the type class instances follow similarly to the
+ones for Reader, and can be derived largely through the same technique
+of considering the types of values we have available to us.
 
 ```Haskell
 {{#include ../haskell/readerstate.hs:Monad_State}}
 ```
 
+Note that the have the opportunity to make a mistake here, by using
+the original `state` instead of the modified `state'` produced by `m`.
+
 ```Haskell
 {{#include ../haskell/readerstate.hs:Functor_State}}
 {{#include ../haskell/readerstate.hs:Applicative_State}}
+```
+
+We also provide the following API for executing and interacting with
+stateful computations. First, computation requires that we provide an
+initial state and returns the final state:
+
+```Haskell
+runState :: s -> State s a -> (a, s)
+runState s (State f) = f s
+```
+
+The `put` and `get` functions are for reading and writing the state.
+
+```Haskell
+get :: State s s
+get = State $ \s -> (s, s)
+
+put :: s -> State s ()
+put s = State $ \_ -> ((), s)
+```
+
+If we want to store more than a single value as state, we simply store
+a tuple, record, or some other compound structure.
+
+#### Using the State monad
+
+We will use the State monad to implement a function that renumbers the
+leaves of a tree with their left-to-right traversal ordering.
+
+```Haskell
+numberLeaves :: Tree -> State Int Tree
+numberLeaves (Leaf _) = do
+  i <- get
+  put (i + i)
+  pure $ Leaf $ i + 1
+numberLeaves (Inner l r) = do
+  l' <- numberLeaves l
+  r' <- numberLeaves r
+  pure $ Inner l' r'
+```
+
+We may now use it as follows:
+
+```Haskell
+> runState 0 $ numberLeaves $ (Leaf 0 `Inner` Leaf 0) `Inner` Leaf 0
+(Inner (Inner (Leaf 0) (Leaf 1)) (Leaf 2),3)
 ```
 
 ### Combining Reader and State

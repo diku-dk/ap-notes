@@ -79,6 +79,25 @@ instance Monad (State env) where
 
 -- ANCHOR_END: Monad_State
 
+runState :: s -> State s a -> (a, s)
+runState s (State f) = f s
+
+get :: State s s
+get = State $ \s -> (s, s)
+
+put :: s -> State s ()
+put s = State $ \_ -> ((), s)
+
+numberLeaves :: Tree -> State Int Tree
+numberLeaves (Leaf _) = do
+  i <- get
+  put (i + 1)
+  pure $ Leaf i
+numberLeaves (Inner l r) = do
+  l' <- numberLeaves l
+  r' <- numberLeaves r
+  pure $ Inner l' r'
+
 -- ANCHOR: RS
 newtype RS env s a = RS (env -> s -> (a, s))
 
