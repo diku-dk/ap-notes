@@ -422,7 +422,7 @@ Since we now have a variable of type `env`, we can apply the function
 ```Haskell
 Reader x >>= f = Reader $ \env ->
                    let x' = x env
-                   in undefined
+                    in undefined
 ```
 
 Now we have `x' :: a`, which allows us to apply the function `f`:
@@ -431,7 +431,7 @@ Now we have `x' :: a`, which allows us to apply the function `f`:
 Reader x >>= f = Reader $ \env ->
                    let x' = x env
                        f' = f x'
-                   in undefined
+                    in undefined
 ```
 
 We have `f' :: Reader env b`, so we can pattern match on `f'` to
@@ -442,7 +442,7 @@ do this directly in `let`, without using `case`:
 Reader x >>= f = Reader $ \env ->
                    let x' = x env
                        Reader f' = f x'
-                   in undefined
+                    in undefined
 ```
 
 Now we have `f' :: env -> b`, which is exactly what we need to finish the
@@ -452,7 +452,7 @@ definition:
 Reader x >>= f = Reader $ \env ->
                    let x' = x env
                        Reader f' = f x'
-                   in f' env
+                    in f' env
 ```
 
 This finishes the `Monad` instance for `Reader`. However, we still
