@@ -430,7 +430,7 @@ Now we have `x' :: a`, which allows us to apply the function `f`:
 ```Haskell
 Reader x >>= f = Reader $ \env ->
                    let x' = x env
-                   let f' = f env
+                       f' = f x'
                    in undefined
 ```
 
@@ -441,18 +441,18 @@ do this directly in `let`, without using `case`:
 ```Haskell
 Reader x >>= f = Reader $ \env ->
                    let x' = x env
-                   let Reader f' = f env
+                       Reader f' = f x'
                    in undefined
 ```
 
-Now we have `f' :: b`, which is exactly what we need to finish the
+Now we have `f' :: env -> b`, which is exactly what we need to finish the
 definition:
 
 ```Haskell
 Reader x >>= f = Reader $ \env ->
                    let x' = x env
-                   let Reader f' = f env
-                   in f'
+                       Reader f' = f x'
+                   in f' env
 ```
 
 This finishes the `Monad` instance for `Reader`. However, we still
