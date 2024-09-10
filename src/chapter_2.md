@@ -186,6 +186,11 @@ instance Monad Maybe where
   (>>=) = maybeBind
 ```
 
+An instance definition also exists for `Either`, equivalent to
+`eitherBind` above. The `Maybe` and `Either` monads are heavily used
+for tracking errors in Haskell code, similar to how we would use
+exceptions in other languages.
+
 ## Intuition, nomenclature, and slang
 
 Monads when viewed as an abstract interface can be quite tricky to get
