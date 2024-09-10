@@ -190,11 +190,18 @@ instance Monad Maybe where
 
 Monads when viewed as an abstract interface can be quite tricky to get
 a grasp of. They are so abstract and general that it can be difficult
-to understand what the general concept *means*. One good approach to
-learning is to essentially disregard the general concept, and focus
-only on specific monads. It is not so difficult to understand
-operationally what the `Monad` instances for `Option` and `Either` do,
-and in this we will mostly be working with *specific* monads.
+to understand what the general concept *means*.
+
+One good approach to learning is to essentially disregard the general
+concept, and focus only on specific monads. It is not so difficult to
+understand operationally what the `Monad` instances for `Option` and
+`Either` do, and in this we will mostly be working with *specific*
+monads.
+
+Another approach is to focus on their form in Haskell. A monad is
+something that implements the `Monad` type class, which just means a
+we have access to `>>=` and `pure`, and can do anything these
+functions allow.
 
 From a pedantic viewpoint, a function `f` of type `a -> m b`, where
 `m` is some monad (such as `Option`), returns a *monadic value* of
