@@ -508,6 +508,10 @@ subsequent ones:
 local f (Reader g) = Reader $ \env -> g (f env)
 ```
 
+When using the `Reader` monad, we will exclusively make use of
+`runReader`, `ask`, and `local` (and functions defined in terms of
+these), and never directly construct `Reader` values.
+
 #### Using the Reader Monad
 
 The `Reader` monad is mostly useful when writing functions with many
