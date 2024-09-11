@@ -99,9 +99,9 @@ and as we shall see, any monad is also an applicative functor.
 
 ## Monads
 
-Consider now the case where we have a value `x :: Maybe Int` and a
-function `f :: Int -> Maybe Int`. That is, the function now also has a
-effect - in this case, it can fail.
+Consider now the case where we have a value `x :: Maybe Int` and a function
+`f :: Int -> Maybe Int`. That is, the function now also has an effect - in
+this case, it can fail.
 
 If we use `fmap f x`, we get something that is well-typed, but the
 result has type `Maybe (Maybe Int)`, which is unlikely to be what we
