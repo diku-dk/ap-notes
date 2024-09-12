@@ -879,7 +879,7 @@ BExp2 ::= "true"
 BExp' ::= "and" BExp2 BExp'
         | "or" BExp2 BExp'
         | ;
-BExp ::= BExp2 BExo' ;
+BExp ::= BExp2 BExp' ;
 ```
 
 Note that we have decided that the `and` operator is
