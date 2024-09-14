@@ -235,7 +235,7 @@ liftM f x = x >>= \x' -> pure (f x')
 And similarly a function `ap` that behaves like `<*>`:
 
 ```Haskell
-ap :: m (a -> b) -> m a -> m b
+ap :: Monad m => m (a -> b) -> m a -> m b
 ap f x = f >>= \f' ->
          x >>= \x' ->
            pure (f' x')
