@@ -6,7 +6,11 @@ import qualified Genserver as GS
 
 main :: IO ()
 main = do
-  putStrLn "Hello, Haskell!"
+  c <- counter 0
+  incr c
+  v <- getvalue c
+
+  putStrLn $ "The counter should now be 5, and it is" ++ show v
 
 
 counter = GS.spawn $ counterLoop
