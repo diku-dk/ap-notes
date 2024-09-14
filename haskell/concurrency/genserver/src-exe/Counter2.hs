@@ -27,6 +27,11 @@ serverloop handlecast handlecall input state = loop state
               GS.send from res
               loop newState
 
+-- TODO: Maybe mkReq should have a better name and be in Genserver
+mkReq inp from = MCall inp from
+
+
+
 
 data NBMsg = NonblockIncr
 
@@ -37,15 +42,10 @@ data BMsg reply where
 
 type State = Int
 
--- TODO: Maybe mkReq should have a better name and be in Genserver
-mkReq inp from = MCall inp from
-
 incr cnt = GS.requestReply cnt $ mkReq Incr
 decrWith cnt n = GS.requestReply cnt $ mkReq $ Decr n
 getValue cnt = GS.requestReply cnt $ mkReq GetValue
 nb_incr cnt = GS.sendTo cnt $ MCast NonblockIncr
-
-
 
 counterLoop input state  = serverloop handlecast handlecall input state
   where
