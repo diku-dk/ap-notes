@@ -1194,6 +1194,25 @@ pBool =
     ]
 ```
 
+As another example, we might add support for parenthetical grouping
+like so:
+
+```Haskell
+parens :: Parser a -> Parser a
+parens p = lexeme (chunk "(") *> p <* lexeme (chunk ")")
+
+pBExp2 :: Parser BExp
+pBExp2 =
+  choice
+    [ Lit <$> pBool,
+      Var <$> lVar,
+      do
+        lKeyword "not"
+        Not <$> pBExp,
+      parens pBExp
+    ]
+```
+
 ~~~admonish info
 
 Applicative style goes beyond merely notational convenience. It is
