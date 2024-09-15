@@ -481,7 +481,7 @@ lFoo = lexeme $ ...
 and *no other parser than those of this form* is allowed to use
 `lexeme` or `space` directly. The `l` prefix is a mnemonic for
 *lexical* - similarly we will begin prefixing our syntax-level parsers
-with `l`.
+with `p`.
 
 For example, this would now be a parser for decimal integers that
 consumes trailing whitespace:
