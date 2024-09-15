@@ -326,14 +326,6 @@ parseTwoDigits = do
   pure (x, y)
 ```
 
-Or more concisely, making use of the `Functor` and `Applicative`
-operators, as well as the operator section `(,)`:
-
-```Haskell
-parseTwoDigits :: Parser (Integer, Integer)
-parseTwoDigits = (,) <$> parseDigit <*> parseDigit
-```
-
 We also construct a combinator that repeatedly applies a given parser
 until it fails:
 
@@ -341,7 +333,10 @@ until it fails:
 many :: Parser a -> Parser [a]
 many p =
   choice
-    [ (:) <$> p <*> many p,
+    [ do
+        x <- p
+        xs <- many p
+        pure $ x : xs,
       pure []
     ]
 ```
@@ -364,7 +359,10 @@ given parser succeeds at least once:
 
 ```Haskell
 some :: Parser a -> Parser [a]
-some p = (:) <$> p <*> many p
+some p = do
+  x <- p
+  xs <- many p
+  pure $ x : xs
 ```
 
 Now we can write our function for parsing integers:
@@ -548,7 +546,10 @@ many :: Parser a -> Parser [a]
 many p =
   choice
     [ pure [],
-      (:) <$> p <*> many p
+      do
+        x <- p
+        xs <- many p
+        pure $ x : xs
     ]
 ```
 
@@ -630,8 +631,12 @@ lOr = lexeme $ void $ chunk "or"
 pBool :: Parser Bool
 pBool =
   choice
-    [ lTrue >> pure True,
-      lFalse >> pure False
+    [ do
+        lKeyword "true"
+        pure True,
+      do
+        lKeyword "false"
+        pure False
     ]
 
 pBExp :: Parser BExp
@@ -1105,3 +1110,98 @@ in the cases we pass to `choice` - this will work, but is inefficient,
 as it makes every `choice` a potential backtracking point. Most
 grammars are designed such that backtracking is only needed for the
 lexical functions.
+
+## Applicative parsing
+
+As you may remember, all `Monad`s are also `Applicative`s. For
+parsing, we can exploit this to write our parsers in a particularly
+concise form called *applicative style*. The technique inolves to use
+the `<$>` operator (from `Functor`) and the `<*>` operator (from
+`Applicative`) to directly intermix the constructors, that put
+together data, with the parsers that produce it. For example, recall
+our definition of `many`:
+
+```Haskell
+many :: Parser a -> Parser [a]
+many p =
+  choice
+    [ do
+        x <- p
+        xs <- many p
+        pure $ x : xs,
+      pure []
+    ]
+```
+
+In the first `choice` case, we are are essentially running the
+computation `p`, then `many p`, then combining their results with the
+list constructor. Using applicative style and the prefix form of the
+list instructor `(:)`, we can instead write `many` as:
+
+```Haskell
+many :: Parser a -> Parser [a]
+many p =
+  choice
+    [ (:) <$> p <*> many ps,
+      pure []
+    ]
+```
+
+Another example is `parseTwoDigits`, which we can rewrite as follows:
+
+```Haskell
+parseTwoDigits :: Parser (Integer, Integer)
+parseTwoDigits = (,) <$> parseDigit <*> parseDigit
+```
+
+In fact, we can write many monadic computations in applicative style,
+but parsing benefits significantly. Two other useful applicative
+operators are `(<*)` and `(*>)`:
+
+```
+(<*) :: Applicative f => f a -> f b -> f a
+(*>) :: Applicative f => f a -> f b -> f b
+```
+
+They accept two applicative (or monadic) computations as arguments,
+and then return the value of respectively the first or the second
+operand, discarding the other. This is quite useful for handling
+grammars where syntactical constructs are surrounded by keywords,
+which must be parsed, but do not produce any interesting values. For
+example, recall our definition of `pBool`:
+
+```Haskell
+pBool :: Parser Bool
+pBool =
+  choice
+    [ do
+        lKeyword "true"
+        pure True,
+      do
+        lKeyword "false"
+        pure False
+    ]
+```
+
+Using applicative style we might write this as:
+
+```Haskell
+pBool :: Parser Bool
+pBool =
+  choice
+    [ lKeyword "true" *> pure True,
+      lKeyword "false" *> pure False
+    ]
+```
+
+~~~admonish info
+
+Applicative style goes beyond merely notational convenience. It is
+possible to construct parser combinator libraries that are *solely*
+applicative, and not monadic, which allows the parser to be inspected
+and transformed in a deeper way, because there is no impenetrable
+`>>=` operator. Applicative parsers are however fundamentally less
+powerful than monadic ones - specifically, they can handle only
+context-free languages.
+
+~~~

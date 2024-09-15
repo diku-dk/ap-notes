@@ -1,4 +1,4 @@
-module ReaderState where
+module Week2.ReaderState where
 
 import Control.Monad (ap, liftM)
 

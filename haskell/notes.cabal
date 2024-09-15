@@ -18,3 +18,7 @@ library
                   , tasty-quickcheck
     exposed-modules:
         Week1Tests
+        Week2.ReaderState
+        Week3.Parser
+        Week3.Megaparsec
+

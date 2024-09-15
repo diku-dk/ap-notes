@@ -1,3 +1,5 @@
+module Week3.Megaparsec where
+
 import Control.Monad (void)
 import Data.Char (isAlpha, isSpace)
 import Data.Void (Void)

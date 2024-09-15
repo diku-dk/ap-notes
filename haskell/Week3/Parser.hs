@@ -1,4 +1,4 @@
--- Random code related to Week 3
+module Week3.Parser where
 
 import Control.Monad (ap, void)
 import Data.Char (isAlpha, isDigit, isSpace, ord)
@@ -124,12 +124,18 @@ parseTwoDigits = (,) <$> parseDigit <*> parseDigit
 many :: Parser a -> Parser [a]
 many p =
   choice
-    [ (:) <$> p <*> many p,
+    [ do
+        x <- p
+        xs <- many p
+        pure $ x : xs,
       pure []
     ]
 
 some :: Parser a -> Parser [a]
-some p = (:) <$> p <*> many p
+some p = do
+  x <- p
+  xs <- many p
+  pure $ x : xs
 
 parseInteger :: Parser Integer
 parseInteger = loop 1 . reverse <$> some parseDigit
@@ -192,8 +198,12 @@ lKeyword s = lexeme $ do
 pBool :: Parser Bool
 pBool =
   choice
-    [ lKeyword "true" >> pure True,
-      lKeyword "false" >> pure False
+    [ do
+        lKeyword "true"
+        pure True,
+      do
+        lKeyword "false"
+        pure False
     ]
 
 pBExp2 :: Parser BExp

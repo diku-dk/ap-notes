@@ -311,7 +311,7 @@ value of type `a` is represented as a function accepting an `env` and
 returning `a`.
 
 ```Haskell
-{{#include ../haskell/readerstate.hs:Reader}}
+{{#include ../haskell/Week2/ReaderState.hs:Reader}}
 ```
 
 Coming up with a definition of the Reader type itself requires actual
@@ -563,7 +563,7 @@ computation as a function that accepts a state (of some abstract type
 `s`) and returns a new state, along with a value.
 
 ```Haskell
-{{#include ../haskell/readerstate.hs:State}}
+{{#include ../haskell/Week2/ReaderState.hs:State}}
 ```
 
 The definitions of the type class instances follow similarly to the
@@ -571,15 +571,15 @@ ones for Reader, and can be derived largely through the same technique
 of considering the types of values we have available to us.
 
 ```Haskell
-{{#include ../haskell/readerstate.hs:Monad_State}}
+{{#include ../haskell/Week2/ReaderState.hs:Monad_State}}
 ```
 
 Note that the have the opportunity to make a mistake here, by using
 the original `state` instead of the modified `state'` produced by `m`.
 
 ```Haskell
-{{#include ../haskell/readerstate.hs:Functor_State}}
-{{#include ../haskell/readerstate.hs:Applicative_State}}
+{{#include ../haskell/Week2/ReaderState.hs:Functor_State}}
+{{#include ../haskell/Week2/ReaderState.hs:Applicative_State}}
 ```
 
 We also provide the following API for executing and interacting with
@@ -641,7 +641,7 @@ with `Reader`) and a mutable store (such as with `State`), then we
 must write a monad from scratch, such as the following `RS` monad.
 
 ```Haskell
-{{#include ../haskell/readerstate.hs:RS}}
+{{#include ../haskell/Week2/ReaderState.hs:RS}}
 ```
 
 See how the function we use to represent the monad takes two
@@ -653,15 +653,15 @@ combines the dataflow that we also saw for the `Reader` and `State`
 monads above:
 
 ```Haskell
-{{#include ../haskell/readerstate.hs:Monad_RS}}
+{{#include ../haskell/Week2/ReaderState.hs:Monad_RS}}
 ```
 
 The `Functor` and `Applicative` instances are then just the usual
 boilerplate.
 
 ```Haskell
-{{#include ../haskell/readerstate.hs:Functor_RS}}
-{{#include ../haskell/readerstate.hs:Applicative_RS}}
+{{#include ../haskell/Week2/ReaderState.hs:Functor_RS}}
+{{#include ../haskell/Week2/ReaderState.hs:Applicative_RS}}
 ```
 
 We can then define the following API for `RS`, providing both State
