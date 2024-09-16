@@ -132,6 +132,28 @@ unit test suite
     Use -p '$0=="unit test suite.should not work 2"' to rerun this test only.
 ```
 
+### Timeouts
+
+Tasty does not know how long a test is supposed to run for, but
+sometimes we do. We can ask Tasty to fail tests after a specified
+period via the `mkTimeout` and `localOption` functions, which are
+imported from `Test.Tasty`. For example, if we want to apply a one
+second timeout to all tests contained in a given `testTree`, we could
+write:
+
+```Haskell
+tests :: TestTree
+tests =
+  localOption (mkTimeout 1000000) $ testGroup
+    "unit test suite"
+    [ successfulTest,
+      failingTest
+    ]
+```
+
+The timeout applies to each individual test in the tree passed to
+`localOption`, not to the entire test suite.
+
 ## Useful types
 
 This section discusses various useful Haskell types that are available

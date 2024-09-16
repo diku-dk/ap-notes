@@ -604,6 +604,16 @@ put s = State $ \_ -> ((), s)
 If we want to store more than a single value as state, we simply store
 a tuple, record, or some other compound structure.
 
+Typically we also define a utility function `modify` for modifying the
+state with a function. This does not need to access the innards of the
+state monad, but can be defined in terms of `get` and `put`:
+
+```Haskell
+modify :: (s -> s) -> State s ()
+modify f = do x <- get
+              put $ f x
+```
+
 #### Using the State monad
 
 We will use the State monad to implement a function that renumbers the
