@@ -78,7 +78,7 @@ instance Applicative Maybe where
   f <*> x = case f of
               Just f' ->
                 case x of
-                  Just x' -> Just (f x)
+                  Just x' -> Just (f' x')
                   Nothing -> Nothing
               Nothing -> Nothing
 ```
