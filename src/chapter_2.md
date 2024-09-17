@@ -526,7 +526,7 @@ First we define the datatype.
 ```Haskell
 data Tree
   = Leaf Int
-  | Inner Tree Int Tree
+  | Inner Tree Tree
   deriving (Show)
 ```
 
