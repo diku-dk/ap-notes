@@ -234,3 +234,94 @@ to apply a function to the `Free e a` that is inside the `e`, meaning
 that if we have a function `h :: Free e a -> Free e b`, we can say
 `fmap h e` to obtain an `e c`. And it turns out that such an `h` is
 defined as a recursive invocation of the `>>=` method for `Free a`.
+
+## The IO Monad
+
+As we have seen in previous chapters, monads are not a special
+language construct in Haskell. While the `Monad` typeclass is part of
+the standard library, we could have defined it ourselves if not, and
+indeed that is how it was originally done. The only special affordance
+that Haskell provides is syntactic sugar in the form of `do` notation,
+and while it is certainly very convenient, it does not let us do
+anything we could not otherwise do. Ultimately, the monads you have
+seen have merely been convenient and abstract ways of doing things
+that could also be done in non-monadic Haskell, and they are indeed
+all ultimately expressed in terms non-monadic code.
+
+There is one exception, however: the `IO` monad is truly built into
+the language, and cannot be expressed using normal Haskell. It is the
+ultimate mechanism by which Haskell programs interact with the
+surrounding world. This is evident in the type of `main`; the
+canonical entry point for Haskell programs:
+
+```Haskell
+main :: IO ()
+```
+
+We can imagine that the Haskell runtime system has some kind of
+interpreter for `IO`, the same way we write interpreters for other
+monads, but there is no way to express this interpretation in pure
+Haskell.
+
+There are various metaphors for how to understand `IO`. One is that it
+is a kind of state monad that passes around the entire state of the
+universe, with functions like `putStr` and `readFile` modifying the
+state, the same way `put` and `get` modify the state of the `State`
+monad. This interpretation is useful to an extent, but break downs
+when considering concurrency, which we will look at later in the
+course. Ultimately, it is most useful to simply consider `>>=` for the
+IO monad as straight up impure and executing side effects.
+
+### Programming with IO
+
+Programming with the `IO` monad in Haskell is very similar to
+programming in a conventional imperative language, and the same as
+with programming with any other monad. However, the fact that it so
+similar to other languages means that our intuition can sometimes
+betray us. For example, consider the function `putStrLn`, which prints
+a given string to stdout, and has the following type:
+
+```
+putStrLn :: String -> IO ()
+```
+
+Simply putting `putStrLn` somewhere in our program will not cause
+anything to be printed, even when it is evaluated. For example,
+evaluating this expression will produce no output:
+
+```Haskell
+let x = putStrLn "hello world"
+in ()
+```
+
+There is nothing here you haven't seen before. All this does is create
+a binding `x` of type `IO ()`, which is not used for anything, and
+then returns the unit value. In fact, this expression just has type
+`()` - it is not monadic at all. In order to actually *execute* an
+effect, we must pass it to `>>=` somehow, putting together an even
+larger `IO` operation, which must ultimately be the definition of the
+program `main` function:
+
+```Haskell
+main :: IO ()
+main = putStrLn "hello world" >>= \_ -> pure ()
+
+-- or equivalently
+
+main :: IO ()
+main = do putStrLn "hello world"
+          pure ()
+```
+
+The fact that IO operations are normal Haskell values, that just
+happen to be executable, means we can manipulate them in various ways.
+As a particularly trivial example:
+
+```Haskell
+main :: IO ()
+main = do let x = putStrLn "hello world"
+          x
+          x
+```
+
+This will print twice, because we are executing the action twice.
