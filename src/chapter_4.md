@@ -263,6 +263,11 @@ interpreter for `IO`, the same way we write interpreters for other
 monads, but there is no way to express this interpretation in pure
 Haskell.
 
+In the assignments and exercises you have worked with, the `main`
+function is in the `runtests.hs` file, and serves as the entry point
+to the unit tests. We can also simply type in `IO` actions at the
+`ghci` prompt, after which `ghci` will execute them.
+
 There are various metaphors for how to understand `IO`. One is that it
 is a kind of state monad that passes around the entire state of the
 universe, with functions like `putStr` and `readFile` modifying the
