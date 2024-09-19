@@ -870,21 +870,22 @@ with arbitrary lookahead*, which are known to not support left
 recursion. The solution to this problem is to rewrite the grammar to
 eliminate left-recursion. If you need a refresher on how to do this,
 see [Grammars and parsing with Haskell using parser
-combinators](https://github.com/diku-dk/ap-e2024-pub/blob/main/week3/parsernotes.pdf).
-
-Transforming the grammar (note that we do not modify the Haskell AST
-definition) provides us with the following:
+combinators](https://github.com/diku-dk/ap-e2024-pub/blob/main/week3/parsernotes.pdf),
+but the idea is to split the non-recursive cases into a separate
+nonterminal (often called `Atom`) Transforming the grammar (note that
+we do not modify the Haskell AST definition) provides us with the
+following:
 
 ```
 var ::= ? one or more alphabetic characters ? ;
-BExp2 ::= "true"
+Atom ::= "true"
         | "false"
         | var
         | "not" BExp ;
-BExp' ::= "and" BExp2 BExp'
-        | "or" BExp2 BExp'
+BExp' ::= "and" Atom BExp'
+        | "or" Atom BExp'
         | ;
-BExp ::= BExp2 BExp' ;
+BExp ::= Atom BExp' ;
 ```
 
 Note that we have decided that the `and` operator is
@@ -897,8 +898,8 @@ initially parsing a `BExp2`, followed by a chain of zero or more
 `and`/`or` clauses.
 
 ```Haskell
-pBExp2 :: Parser BExp
-pBExp2 =
+pAtom :: Parser BExp
+pAtom =
   choice
     [ Lit <$> pBool,
       Var <$> lVar,
@@ -909,7 +910,7 @@ pBExp2 =
 
 pBExp :: Parser BExp
 pBExp = do
-  x <- pBExp2
+  x <- pAtom
   chain x
   where
     chain x =
@@ -948,7 +949,91 @@ parseBExp s = fst <$> runParser p s
       pure x
 ```
 
+Note how this "top level parser" also takes care to skip *leading*
+whitespace (in contrast to lexer functions that skip *trailing*
+whitespace as their principle), and asserts that no input must remain
+unconsumed.
+
 ### Operator precedence
+
+We still have a final problem we must address. Consider parsing the
+input `"x or y and z"`:
+
+```
+> parseBExp "x or y and z"
+Just (And (Or (Var "x") (Var "y")) (Var "z"))
+```
+
+Whether this is correct or not of course depends on how the grammar is
+specified, but the usual convention in logical formulae is that
+conjunction (`and`) binds tighter than disjunction (`or`). This is
+similar to how mathematical notation assigns higher priority to
+multiplication than addition. Generally, a grammar specification will
+come with a set of side conditions specifyint an operator priority
+(and associativity). The way to handle operator priority in a parser
+build with combinators is to perform yet another a grammar
+transformation. The idea is to split the grammar rules into multiple
+*levels*, with one level per priority. For our Boolean expressions,
+the transformed grammar looks like this:
+
+```
+var ::= ? one or more alphabetic characters ? ;
+Atom ::= "true"
+        | "false"
+        | var
+        | "not" BExp ;
+BExp0' ::= "and" Atom BExp0'
+        | ;
+BExp1 ::= Atom BExp1' ;
+BExp0' ::= "or" Atom BExp0'
+        | ;
+BExp0 ::= BExp1 BExp0' ;
+BExp ::= BExp0 ;
+```
+
+And performing the corresponding transformation on our parser (or
+simply rewriting it from scratch, given this new grammar) produces
+this:
+
+```Haskell
+pBExp1 :: Parser BExp
+pBExp1 = do
+  x <- pAtom
+  chain x
+  where
+    chain x =
+      choice
+        [ do
+            lKeyword "and"
+            y <- pAtom
+            chain $ And x y,
+          pure x
+        ]
+
+pBExp0 :: Parser BExp
+pBExp0 = do
+  x <- pBExp1
+  chain x
+  where
+    chain x =
+      choice
+        [ do
+            lKeyword "or"
+            y <- pBExp1
+            chain $ Or x y,
+          pure x
+        ]
+
+pBExp :: Parser BExp
+pBExp = pBExp0
+```
+
+And now we observe the parser result that we desire:
+
+```
+> parseBExp "x or y and z"
+Just (Or (Var "x") (And (Var "y") (Var "z")))
+```
 
 ## Megaparsec
 
@@ -1073,7 +1158,7 @@ unexpected 'x'
 
 The reason for this is that Megaparsec, for efficiency reasons, does
 not automatically backtrack when a parser fails. Due to the way we
-have ordered our `choice` in `pBExp2`, we will initially try to parse
+have ordered our `choice` in `pAtom`, we will initially try to parse
 the literal `true` with `lKeyword` in `pBool`, which will read the
 input `true`, and then fail due to `notFollowedBy`. However, *the
 input remains read*, which means Megaparsec's implementation of
@@ -1201,8 +1286,8 @@ like so:
 parens :: Parser a -> Parser a
 parens p = lexeme (chunk "(") *> p <* lexeme (chunk ")")
 
-pBExp2 :: Parser BExp
-pBExp2 =
+pAtom :: Parser BExp
+pAtom =
   choice
     [ Lit <$> pBool,
       Var <$> lVar,

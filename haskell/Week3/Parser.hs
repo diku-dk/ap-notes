@@ -206,8 +206,8 @@ pBool =
         pure False
     ]
 
-pBExp2 :: Parser BExp
-pBExp2 =
+pAtom :: Parser BExp
+pAtom =
   choice
     [ Lit <$> pBool,
       Var <$> lVar,
@@ -216,23 +216,36 @@ pBExp2 =
         Not <$> pBExp
     ]
 
-pBExp :: Parser BExp
-pBExp = do
-  x <- pBExp2
+pBExp1 :: Parser BExp
+pBExp1 = do
+  x <- pAtom
   chain x
   where
     chain x =
       choice
         [ do
             lKeyword "and"
-            y <- pBExp2
+            y <- pAtom
             chain $ And x y,
-          do
+          pure x
+        ]
+
+pBExp0 :: Parser BExp
+pBExp0 = do
+  x <- pBExp1
+  chain x
+  where
+    chain x =
+      choice
+        [ do
             lKeyword "or"
-            y <- pBExp2
+            y <- pBExp1
             chain $ Or x y,
           pure x
         ]
+
+pBExp :: Parser BExp
+pBExp = pBExp0
 
 parseBExp :: String -> Maybe BExp
 parseBExp s = fst <$> runParser p s
