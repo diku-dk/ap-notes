@@ -365,6 +365,9 @@ raise an exception:
 *** Exception: Prelude.head: empty list
 ```
 
+Exceptions raised by pure code are often called *imprecise
+exceptions*, because they are not evident in the type.
+
 Today, partial functions are largely considered a bad idea by most
 Haskell programmers, because they make the types unreliable. Instead
 `head` should perhaps return a `Maybe` value. Yet even adherents of
@@ -431,7 +434,7 @@ This will give us a rather long (here abbreviated) error message:
 
 The problem is that `catch` can handle *any* exception, so how is
 Haskell to know which one we know? We need to put in a type annotation
-to specify the one we are interested in. In our case, we will use the
+to specify the one we are interested in. For AP we will mainly use the
 type `SomeException`, which acts as a "root type" for all other kinds
 of exceptions. In general, in AP we will not discriminate between
 different types of exceptions, although Haskell provides facilities
@@ -461,6 +464,73 @@ handleDivByZero = do
   let handler :: SomeException -> IO ()
       handler e = putStrLn $ "It went wrong: " ++ show e
   print (div 1 0) `catch` handler
+```
+
+#### Example: Safely Reading Files
+
+The Haskell prelude provides the function `readFile`. Given a
+`FilePath` (a synonym for `String`), it returns the contents of a
+file:
+
+```Haskell
+readFile :: FilePath -> IO String
+```
+
+If the file cannot be read, it is reported with an exception:
+
+```Haskell
+> readFile "doesnotexist"
+*** Exception: doesnotexist: openFile: does not exist (No such file or directory)
+```
+
+Since the exception handling machinery in Haskell is somewhat
+cumbersome, we may want to write a wrapper for `readFile` that returns
+a proper sum type with error conditions instead. Reading a file can go
+wrong in many ways (perhaps someone cuts a disk cable at an
+inopportune time), but there are often some common we want to handle
+specially, such as the file not existing. We define a sum type that
+captures the result of attempting to read a file:
+
+```Haskell
+data FileContents
+  = FileNotFound
+  | CouldNotRead String
+  | FileContents String
+  deriving (Show)
+```
+
+The `CouldNotRead` constructor is used as a catch-all for all errors
+except for file-not-found, and `FileContents` represents success.
+
+When `readFile` fails, it throws an exception of type `IOError`. Using
+the function `isDoesNotExistError` from `System.IO.Error`, we can
+detect whether such an `IOError` corresponds to the case where a file
+of the given name does not exist. We can put all this together into a
+function for reading a file safely (in this case, "safely" means "does
+not throw exceptions"):
+
+```Haskell
+import System.IO.Error (isDoesNotExistError)
+
+readFileSafely :: FilePath -> IO FileContents
+readFileSafely f = (FileContents <$> readFile f) `catch` onException
+  where
+    onException :: IOError -> IO FileContents
+    onException e =
+      if isDoesNotExistError e
+        then pure FileNotFound
+        else pure $ CouldNotRead $ show e
+```
+
+And observe how well it works:
+
+```
+> readFileSafely "doesnotexist"
+FileNotFound
+> readFileSafely "/root/secrets"
+CouldNotRead "/root/secrets: openFile: permission denied (Permission denied)"
+> readFileSafely "ap-exam-solution.hs"
+FileContents "module Solution where[...]"
 ```
 
 #### Laziness and Exceptions

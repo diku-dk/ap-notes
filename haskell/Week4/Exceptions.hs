@@ -1,4 +1,5 @@
 import Control.Exception (SomeException, catch, evaluate)
+import System.IO.Error (isDoesNotExistError)
 
 handleDivByZero :: IO ()
 handleDivByZero = do
@@ -21,3 +22,18 @@ doesWork = do
         putStrLn $ "It went wrong: " ++ show e
         pure 42
   evaluate (div 1 0) `catch` handler
+
+data FileContents
+  = FileNotFound
+  | CouldNotRead String
+  | FileContents String
+  deriving (Show)
+
+readFileSafely :: FilePath -> IO FileContents
+readFileSafely f = (FileContents <$> readFile f) `catch` onException
+  where
+    onException :: IOError -> IO FileContents
+    onException e =
+      if isDoesNotExistError e
+        then pure FileNotFound
+        else pure $ CouldNotRead $ show e
