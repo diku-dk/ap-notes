@@ -13,6 +13,7 @@ library
     build-depends:
                       base
                   , megaparsec >= 9.6.1
+                  , QuickCheck
                   , tasty
                   , tasty-hunit
                   , tasty-quickcheck
@@ -22,4 +23,5 @@ library
         Week3.Parser
         Week3.Megaparsec
         Week4.Exceptions
+        Week5.Properties
 
