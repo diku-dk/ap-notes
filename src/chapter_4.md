@@ -594,3 +594,46 @@ doesWork = do
 It went wrong: divide by zero
 42
 ```
+
+### IO References
+
+One of the basic facilities provided by the IO monad is a form of
+mutable references, called `IORef`s, which can be found in the module
+[Data.IORef](https://hackage.haskell.org/package/base-4.20.0.1/docs/Data-IORef.html).
+The type `IORef a` denotes a mutable reference to a value of type `a`.
+We can create an `IORef` using the function `newIORef`:
+
+```Haskell
+newIORef :: a -> IO (IORef a)
+```
+
+When creating an `IORef`, we must provide an initial value. Reading
+and writing is done through the following functions:
+
+```Haskell
+readIORef :: IORef a -> IO a
+
+writeIORef :: IORef a -> a -> IO ()
+```
+
+While other utility functions exist, this interface is all we need in
+order to interact with IORefs.
+
+```Haskell
+> r <- newIORef True
+> readIORef r
+True
+> writeIORef r False
+> readIORef r
+False
+```
+
+~~~admonish warning
+
+`IORef`s are *not* thread safe. When we discuss concurrent programming
+later in the course we must be careful not to access them in
+unstructured ways from multiple concurrent threads. Programming with
+`IORef`s in Haskell is vulnerable to all the usual tragedies of concurrent
+programming with mutable state.
+
+~~~
