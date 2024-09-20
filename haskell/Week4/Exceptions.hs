@@ -1,3 +1,5 @@
+module Week4.Exceptions where
+
 import Control.Exception (SomeException, catch, evaluate)
 import System.IO.Error (isDoesNotExistError)
 
