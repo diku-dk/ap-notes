@@ -330,3 +330,197 @@ main = do let x = putStrLn "hello world"
 ```
 
 This will print twice, because we are executing the action twice.
+
+### Exceptions and IO
+
+We have previously seen how to use monads to encode and propagate
+errors, such as with `Maybe` and `Either`. The advantage of this
+approach is that the potential errors are directly visible in the
+types of functions. However, not all errors are represented, or *can*
+be represented, in this way. For example, the `div` function has the
+following type:
+
+```
+div :: Integral a => a -> a -> a
+```
+
+Yet if we try to divide by zero, we will get an error:
+
+```
+> div 1 0
+*** Exception: divide by zero
+```
+
+This is an *exception*. Despite Haskell being a pure language, it is
+indeed the case that some ostensibly pure functions, such as `div`,
+can raise exceptions. One common cause of exceptions is the function
+`error`, which we often use to indicate program bugs, or `undefined`,
+which we often use during development. Many prelude functions such as
+`head` or `tail` are also *partial*, meaning they are not defined on
+their entire domain. Taking the `head` of an empty list will also
+raise an exception:
+
+```
+> head []
+*** Exception: Prelude.head: empty list
+```
+
+Today, partial functions are largely considered a bad idea by most
+Haskell programmers, because they make the types unreliable. Instead
+`head` should perhaps return a `Maybe` value. Yet even adherents of
+this approach may hesitate to make functions such as `div` return
+`Maybe`, due to the sheer amount of boilerplate this would require
+(even when using monads to propagate the error situaton).
+
+Further, other exceptions are harder to avoid: they are also raised
+for out-of-memory situations or various asynchronous signals. Most
+functions that perform IO, such as opening or writing to a file, will
+also use exceptions to report errors. As a result, we need a way to
+*handle* exceptions.
+
+~~~admonish info
+
+*Exception* is an overloaded term. In this section we discuss solely
+the kinds of exceptions that are thrown by functions like `error`. It is
+common to use the word "exception" to refer to the kind of error handling
+done with `Either` or similar monads.
+
+~~~
+
+
+#### Handling Exceptions
+
+Exceptions are undeniably an effect, and while they can be thrown in
+pure code, it would be a violation of referential transparency to also
+*handle* them in pure code. As a result, exceptions can only be caught
+in the IO monad. The facilities for working with exceptions are found
+in
+[Control.Exception](https://hackage.haskell.org/package/base-4.20.0.1/docs/Control-Exception.html).
+This is a rather rich and complicated module, and we will not need
+much of what it provides. The main things we will need is the `catch`
+function:
+
+```Haskell
+catch :: Exception e => IO a -> (e -> IO a) -> IO a
+```
+
+The Haskell exception handling machinery is fairly similar to that
+which you might be familiar with from other languages. The `catch`
+function takes two arguments. It tries to run the provided `IO`
+action, and if an exception is thrown during that action, it calls the
+provided handler function with the exception. The wrinkle is that
+`catch` is *polymorphic*, while an exception is any value that
+implements the `Exception` typeclass, any use of `catch` must somehow
+specify *exactly* which type of exception is caught by this specific
+`catch`. This may sound unclear, so here is an example where we try to
+handle a division by zero:
+
+```Haskell
+handleDivByZero :: IO ()
+handleDivByZero =
+  print (div 1 0) `catch` (\e -> putStrLn "I am a handler")
+```
+
+This will give us a rather long (here abbreviated) error message:
+
+```
+    • Ambiguous type variable ‘e0’ arising from a use of ‘catch’
+      prevents the constraint ‘(Exception e0)’ from being solved.
+      Probable fix: use a type annotation to specify what ‘e0’ should be.
+```
+
+The problem is that `catch` can handle *any* exception, so how is
+Haskell to know which one we know? We need to put in a type annotation
+to specify the one we are interested in. In our case, we will use the
+type `SomeException`, which acts as a "root type" for all other kinds
+of exceptions. In general, in AP we will not discriminate between
+different types of exceptions, although Haskell provides facilities
+for doing so. The easiest way to indicate that this is the exception
+we want to catch is to make the handler a local function with an
+explicit type ascription:
+
+```Haskell
+handleDivByZero :: IO ()
+handleDivByZero = do
+  let handler :: SomeException -> IO ()
+      handler e = putStrLn "I am a handler"
+  print (div 1 0) `catch` handler
+```
+
+```
+> handleDivByZero
+I am a handler
+```
+
+We can turn a `SomeException` into a (hopefully) human-readable string
+by using its `Show` instance:
+
+```Haskell
+handleDivByZero :: IO ()
+handleDivByZero = do
+  let handler :: SomeException -> IO ()
+      handler e = putStrLn $ "It went wrong: " ++ show e
+  print (div 1 0) `catch` handler
+```
+
+#### Laziness and Exceptions
+
+Haskell's laziness can sometimes make it difficult to handle
+exceptions in pure code. The reason is that exceptions are not thrown
+until the associated computation is forced, which may not be when you
+expect. For example, we may write code like this, with the intent of
+replacing a division-by-zero error with an appropriate dummy value:
+
+```Haskell
+doesNotWork :: IO Int
+doesNotWork = do
+  let handler :: SomeException -> IO Int
+      handler e = do
+        putStrLn $ "It went wrong: " ++ show e
+        pure 42
+  pure (div 1 0) `catch` handler
+```
+
+But we receive an unpleasant surprise:
+
+```
+> doesNotWork
+*** Exception: divide by zero
+```
+
+The reason is that the expression `div 1 0` is not actually fully
+evaluated inside the computation protected by `catch` - instead it is
+simply returned un-evaluated, and not until `ghci` tries to print the
+result of the computation (after `catch` is done) will be division
+actually be attempted and the exception thrown.
+
+One solution is to use the `evaluate` function, also from
+`Control.Exception`, which has this signature:
+
+```
+evaluate :: a -> IO a
+```
+
+An expression `evaluate x` is much like `pure x`, but evaluates its
+argument to *weak head normal form* (*WHNF*) before injecting it into
+the monad. Intuitively, it will evaluate the provided expression up to
+the *first* constructor, hopefully uncovering any exceptions
+immediately. For `Int`, that will be the entire value, but for a
+lists, it will only be up to the first cons cell. However, this is
+enough to make this simple example work:
+
+```Haskell
+doesWork :: IO Int
+doesWork = do
+  let handler :: SomeException -> IO Int
+      handler e = do
+        putStrLn $ "It went wrong: " ++ show e
+        pure 42
+  evaluate (div 1 0) `catch` handler
+```
+
+```
+> doesWork
+It went wrong: divide by zero
+42
+```
