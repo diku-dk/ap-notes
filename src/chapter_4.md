@@ -61,7 +61,7 @@ define for the monad (we'll return to this below), and importantly we
 can define multiple different interpretation functions for the same
 monad. This is what allows separation of concerns.
 
-The `f (Free e a)` part merits elaboration, as this is the first time
+The `e (Free e a)` part merits elaboration, as this is the first time
 we have seen a datatype that applies one of its type parameters to
 another type. This is an instance of "higher-rank polymorphism", where
 we abstract not over *types*, but *type constructors*. While this is
