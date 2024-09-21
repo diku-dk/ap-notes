@@ -143,10 +143,16 @@ it represents a computation without any effects:
 {{#include ../haskell/free_monads.hs:RunReader_Pure}}
 ```
 
-For the second case, we are considering a value `Free (ReadOp f)`,
-where `e` is of type `r -> Reader r a`. We can apply `e` to the
-environment to obtain a `Reader r a`, which we can then execute with a
-recursive application of `runReader`:
+For the second case, we are considering a value `Free (ReadOp g)`,
+where `g` is of type `r -> Reader r a`.  To see this, recall that the
+`Free` data constructor takes something of type `e (Free e a)` as a
+payload; setting `e = ReaderOp r`, this type becomes `ReaderOp r (Free
+(ReaderOp r) a)`, which is the same as `ReaderOp r (Reader r
+a)`. Referring back to the definition of `ReaderOp`, we conclude that
+`g` must have type `r -> Reader r a`.
+
+We can now apply `g` to the environment to obtain a `Reader r a`, which we
+can then execute with a recursive application of `runReader`:
 
 ```Haskell
 {{#include ../haskell/free_monads.hs:RunReader_Free}}

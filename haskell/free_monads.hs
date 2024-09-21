@@ -53,7 +53,7 @@ runReader :: r -> Reader r a -> a
 runReader _ (Pure x) = x
 -- ANCHOR_END: RunReader_Pure
 -- ANCHOR: RunReader_Free
-runReader r (Free (ReadOp f)) = runReader r (f r)
+runReader r (Free (ReadOp g)) = runReader r (g r)
 
 -- ANCHOR_END: RunReader_Free
 
