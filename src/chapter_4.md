@@ -979,3 +979,290 @@ Another useful change would be to allow memoisation of arguments and
 results that are not exclusively of type `Int` (or some other fixed
 type). This is not particularly difficult, although somewhat more
 verbose, and so we have left it out of the exposition here.
+
+### Asynchronous Programming with Free Monads
+
+Asynchronous programming styles have become common in languages
+targeted towards network programming, often support by language
+features such as async/await facilities. The purpose of such language
+features is to *hide* the somewhat contorted control flow otherwise
+required by asynchronous programming. For example, a program often
+needs to *wait* for an event to happen. Operationally, this happens by
+suspending the current computation, recording its state in a data
+structure somewhere. Whenever an event comes in, it is checked whether
+any suspended computations depend on it, and if so, they are resumed
+until the next time they need to be suspended. However, exposing all
+this complexity leads to a very awkward programming experience.
+Instead, we would like to simply have a seemingly normal function that
+*blocks* until the requested event arrives - but of course without
+suspending the entire system. We shall now see how this can be
+accomplished using a design based on free monads.
+
+We start by defining a *very* simple model of events. An event is a
+name paired with a value, and the value is always an integer.
+
+```Haskell
+type EventName = String
+
+type EventValue = Int
+
+type Event = (String, EventValue)
+```
+
+Events come from the outside world, in unpredictable order and with
+uncertain timing, and are in practice often the result of
+communication with other programs. For testing purposes, we can model
+sequences of events as Haskell lists, but baking such an assumption
+into our systems would make them useless in practice. At any given
+time, many computations may be suspended waiting for events to happen;
+some of them perhaps waiting for the same events.
+
+To support his style of programming, we define an effect type for our
+asynchronous programming model, with support for two effects:
+
+1. Waiting for an event of a given name.
+
+2. Logging a message. This is solely so we can observe execution of
+   our asynchronous programs through their side effects (printing to
+   the console), and is in principle unrelated to events.
+
+The definition, along with its `Functor` instance, is as follows:
+
+```Haskell
+data EventOp a
+  = WaitFor EventName (EventValue -> a)
+  | Log String a
+
+instance Functor EventOp where
+  fmap f (WaitFor s c) = WaitFor s $ \x -> f (c x)
+  fmap f (Log s c) = Log s $ f c
+
+type EventM a = Free EventOp a
+```
+
+And it is all packed together under the name `EventM` with two
+accessor functions `waitFor` and `logMsg`:
+
+```Haskell
+waitFor :: String -> EventM EventValue
+waitFor s = Free (WaitFor s pure)
+
+logMsg :: String -> EventM ()
+logMsg s = Free $ LogMsg s $ pure ()
+```
+
+Here are three examples of how to use the monad. All of these
+functions listen for events and do something (fairly trivial) with the
+result. The purpose of the `divider` example is solely to illustrate
+that control flow and looping is possible.
+
+```Haskell
+adder :: EventM ()
+adder = do
+  logMsg "starting adder"
+  x <- waitFor "add"
+  y <- waitFor "add"
+  logMsg $ unwords [show x, "+", show y, "=", show $ x + y]
+
+multiplier :: EventM ()
+multiplier = do
+  logMsg "starting multiplier"
+  x <- waitFor "mul"
+  y <- waitFor "mul"
+  logMsg $ unwords [show x, "*", show y, "=", show $ x * y]
+
+divider :: EventM ()
+divider = do
+  logMsg "starting divider"
+  x <- waitFor "div"
+  y <- waitForDivisor
+  logMsg $ unwords [show x, "/", show y, "=", show $ x `div` y]
+  where
+    waitForDivisor = do
+      y <- waitFor "div"
+      if y == 0
+        then do
+          logMsg $ "Cannot divide by zero"
+          waitForDivisor
+        else pure y
+```
+
+Once you have finished with this section, and you have seen how the
+sausage is made, I suggest returning to these definitions and normal
+how *normal* they look. The complexity of how they are actually
+executed is completely hidden by the monad abstraction.
+
+A definition such as `adder` represents a *process*. It runs for as
+far as possible until the value of an event is needed, at which point
+it is suspended. We can write an interpretation function that does
+just that; evaluating as many of the effects as possible until
+reaching a `WaitFor`:
+
+```Haskell
+stepUntilWait :: EventM a -> IO (EventM a)
+stepUntilWait (Pure x) = pure $ Pure x
+stepUntilWait (Free (LogMsg s c)) = do
+  putStrLn $ s
+  stepUntilWait c
+stepUntilWait (Free (WaitFor s c)) =
+  pure $ Free $ WaitFor s c
+```
+
+It is possible to use `stepUntilWait` directly in `ghci`, but the
+result is not terribly interesting:
+
+```
+> a <- stepUntilWait adder
+starting adder
+```
+
+Now we have a name `x` representing a suspended execution.
+
+```
+:t a
+a :: EventM ()
+```
+
+Unfortunately we cannot inspect its *structure*, because `EventOp` is
+not an instance of `Show`, but we can be pretty sure it is currently
+stuck on a `WaitFor` effect.
+
+At some point, an event may arrive. We can then check whether the
+event name matches what the suspended execution is waiting for, and if
+so, call the continuation with the value. If the event name does not
+match, we do nothing. We can encapsulate this in a function:
+
+```Haskell
+stepSingleEvent :: EventM () -> Event -> IO (EventM ())
+stepSingleEvent (Free (WaitFor waiting_for c)) (event_name, event_val) =
+  if waiting_for == event_name
+    then stepUntilWait $ c event_val
+    else pure $ Free $ WaitFor waiting_for c
+stepSingleEvent p _ = pure p
+```
+
+After invoking the continuation, we use `stepUntilWait` to evaluate
+any subsequent non-`WaitFor` events, but we do *not* recursively call
+`stepSingleEvent`. This is because events are distinguishable: we want
+the `adder` process to process two *distinct* events, not have the
+same event with name `"add"` to provide values for both `waitFor`s.
+
+Here is how we can use `stepSingleEvent`, continuing execution of the
+`a` above:
+
+```
+> b <- stepSingleEvent a ("add", 1)
+> c <- stepSingleEvent b ("add", 2)
+1 + 2 = 3
+```
+
+Note how execution returns to our control after every invocation to
+`stepSingleEvent`. This allows us to use arbitrary logic to retrieve
+events (such as reading them from the network or a file), without the
+process definitions (`adder`, `multiplier`, `divider`) having to care
+about the details.
+
+This is often called an *event pump*, by analogy to old-fashioned
+water pumps. We continue cranking the handle (calling
+`stepSingleEvent`), which lets the process continue through its
+execution. The interesting thing is that the suspended computations,
+the `a`, `b`, and `c` values above, are ordinary Haskell values, that
+we can manipulate like any other Haskell value. One slightly dubious
+thing we can do is to keep reusing the same suspended computation
+multiple times:
+
+```
+> stepSingleEvent b ("add", 2)
+1 + 2 = 3
+> stepSingleEvent b ("add", 2)
+1 + 2 = 3
+> stepSingleEvent b ("add", 2)
+1 + 2 = 3
+```
+
+Another more useful thing we can do is to keep *multiple* suspended
+processes in a list. Whenever an event arrives, we crank the pump once
+on each of them. If a process is truly finished, represented by the
+`Pure` constructor, we remove it from the list. This can be expressed
+as a fairly simple recursive function:
+
+```Haskell
+stepEventM :: [EventM ()] -> Event -> IO [EventM ()]
+stepEventM [] _ = pure []
+stepEventM (p : ps) event = do
+  p' <- stepUntilWait p
+  case p' of
+    Pure () -> stepEventM ps event
+    _ -> do
+      p'' <- stepSingleEvent p' event
+      ps' <- stepEventM ps event
+      pure $ p'' : ps'
+```
+
+And finally, we can write another straightforward function that simply
+calls `stepEventM` once for every event in a list of events:
+
+```Haskell
+runEventM :: [EventM ()] -> [Event] -> IO [EventM ()]
+runEventM ps [] = do
+  pure ps
+runEventM ps (e : es) = do
+  ps' <- stepEventM ps e
+  runEventM ps' es
+```
+
+This lets us have interleaved execution of asynchronous operations - a
+programming technique that in most languages is either hopelessly
+complicated, or requires direct runtime support.
+
+```
+> runEventM [adder, multiplier, divider]
+            [("add", 1),
+             ("mul", 2),
+             ("div", 3),
+             ("add", 4),
+             ("div", 0),
+             ("mul", 5),
+             ("div", 6)]
+starting adder
+starting multiplier
+starting divider
+1 + 4 = 5
+Cannot divide by zero
+2 * 5 = 10
+3 / 6 = 0
+```
+
+As an example that truly demonstrates how decoupled the processes are
+from how events are read, the following function reads events
+interactively from the console, through the the `readLn` function
+which reads a value in Haskell syntax.
+
+```Haskell
+interactivelyRunEventM :: [EventM ()] -> IO ()
+interactivelyRunEventM [] = pure ()
+interactivelyRunEventM ps = do
+  ps' <- mapM stepUntilWait ps
+  event <- readLn
+  ps'' <- stepEventM ps' event
+  interactivelyRunEventM ps''
+```
+
+Here is an example of using it, where the output from the processes is
+intermixed with my typed input:
+
+```
+> interactivelyRunEventM [adder, multiplier, divider]
+starting adder
+starting multiplier
+starting divider
+("add", 1)
+("add", 2)
+1 + 2 = 3
+("div", 3)
+("mul", 2)
+("mul", 4)
+2 * 4 = 8
+("div", -1)
+3 / -1 = -3
+```

@@ -24,5 +24,6 @@ library
         Week3.Megaparsec
         Week4.Exceptions
         Week4.Free
+        Week4.FreeAsync
         Week5.Properties
 
