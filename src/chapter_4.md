@@ -1116,7 +1116,7 @@ result is not terribly interesting:
 starting adder
 ```
 
-Now we have a name `x` representing a suspended execution.
+Now we have a name `a` representing a suspended execution.
 
 ```
 :t a
