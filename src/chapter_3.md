@@ -727,7 +727,7 @@ Now we get the desired behaviour:
 
 ```
 > runParser pBExp "not x"
-Just (Var "not","x")
+Just (Not (Var "x"),"")
 ```
 
 But another case still behaves oddly:

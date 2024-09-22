@@ -186,7 +186,7 @@ keywords = ["not", "true", "false", "and", "or"]
 lVar :: Parser String
 lVar = lexeme $ do
   v <- some $ satisfy isAlpha
-  if False && v `elem` keywords
+  if v `elem` keywords
     then fail "keyword"
     else pure v
 
