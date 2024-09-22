@@ -978,16 +978,20 @@ the transformed grammar looks like this:
 
 ```
 var ::= ? one or more alphabetic characters ? ;
+
 Atom ::= "true"
         | "false"
         | var
         | "not" BExp ;
-BExp0' ::= "and" Atom BExp0'
+
+BExp1' ::= "and" Atom BExp1'
         | ;
 BExp1 ::= Atom BExp1' ;
+
 BExp0' ::= "or" Atom BExp0'
         | ;
 BExp0 ::= BExp1 BExp0' ;
+
 BExp ::= BExp0 ;
 ```
 
