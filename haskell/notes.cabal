@@ -26,4 +26,5 @@ library
         Week4.Free
         Week4.FreeAsync
         Week5.Properties
+        Week6.Counter
 

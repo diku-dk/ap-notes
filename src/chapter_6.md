@@ -108,5 +108,186 @@ If we call `readChan` on a channel where we hold the only reference
 system will raise an exception that will cause the thread to be
 terminated. This is a natural and safe way to shut down a thread that
 is no longer necessary, assuming the thread does not hold resources
-(e.g., open files) that must be manually closed. Handling such cases is
-outside the scope of this note.
+(e.g., open files) that must be manually closed. Handling such cases
+is outside the scope of these notes.
+
+## Remote procedure calls (RPC)
+
+The Haskell message passing facility is asynchronous, meaning that
+`writeChan` returns immediately with a unit value. This is suitable
+when we are sending an order, or some information, to a remote server,
+and have no interest in the result. However, in many cases we are in
+fact interested in the response, either because we made a query for
+information, or because we want to know whether the request failed.
+Specifically, we want a way to perform *remote procedure calls*
+(RPCs).
+
+To implement RPC, we need to invent a bit of machinery on top of the
+raw asynchronous message passing machinery. The way we make it work is
+by creating a new channel that is used for transmitting the result.
+This channel is then sent along as part of the message.
+
+The first step is to make a type for the messages that will be send to
+the server. Again, we use the pattern where we make constructor for
+each kind of message, and the last argument for each constructor is a
+channel for sending back the response:
+
+```Haskell
+data Msg = Incr     (Chan ())
+         | Decr Int (Chan ())
+         | GetValue (Chan Int)
+```
+
+Here we use the Haskell type `()` when no meaningful result is
+expected.
+
+Next, we declare a type alias `Counter` for representing a counter
+server, here just the input channel, and a function for creating a new
+counter server:
+
+```Haskell
+type Counter = Chan Msg
+
+counter :: IO Counter
+counter = do
+  input <- newChan
+  _ <- forkIO $ counterLoop input 0
+  return input
+```
+
+We can define a function to abstract the communication pattern where
+we send a message and then wait for an reply:
+
+```haskell
+requestReply :: Counter -> (Chan a -> Msg) -> IO a
+requestReply cnt con = do
+  reply_chan <- newChan
+  writeChan cnt $ con reply_chan
+  readChan reply_chan
+```
+
+Note that the second argument of the `requestReply` function is a
+*function* that constructs a `Msg` value.
+
+Now we can use the `requestReply` function to define the three API
+functions `incr`, `decrWith` and `getValue` for a counter server:
+
+```haskell
+incr :: Counter -> IO ()
+incr cnt = requestReply cnt Incr
+
+decrWith :: Counter -> Int -> IO ()
+decrWith cnt n = requestReply cnt $ Decr n
+
+getValue :: Counter -> IO Int
+getValue cnt = requestReply cnt GetValue
+```
+
+Finally, we define the internal server loop function:
+
+```Haskell
+counterLoop :: Chan Msg -> Int -> IO b
+counterLoop input state = do
+  msg <- readChan input
+  case msg of
+    Incr from -> do
+      let (newState, res) = (state + 1, ())
+      writeChan from res
+      counterLoop input newState
+    Decr n from -> do
+      let (newState, res) = (state - n, ())
+      writeChan from res
+      counterLoop input newState
+    GetValue from -> do
+      let (newState, res) = (state, state)
+      writeChan from res
+      counterLoop input newState
+```
+
+## Timeouts
+
+The channel abstraction does not directly support timeouts for RPC
+calls. However, we can build our own support for timeouts. The
+technique we employ is to allow the reply to be either the intended
+value *or* a special timeout value. When we perform an RPC, we then
+also launch a new thread that sleeps for some period of time, then
+write the timeout value to the channel. If the non-timeout response is
+the first to arrive, then the timeout value is ignored and harmless.
+
+First we must import the `threadDelay` function.
+
+```Haskell
+import Control.Concurrent (threadDelay)
+```
+
+Then we define a type `Timeout` with a single value `Timeout`.
+
+```Haskell
+data Timeout = Timeout
+```
+
+Then we define a message type (in this case polymorphic in `a`) where
+the reply channel accepts messages of type `Either Timeout a`.
+
+```Haskell
+data Msg a = MsgDoIt (Chan (Either Timeout a)) (IO a)
+```
+
+A `Msg a` denotes a request to perform some impure operation `IO a`
+(perhaps a network request), then reply with the resulting value of
+type `a`.
+
+We can use this to build a facility for performing an action with a
+timeout:
+
+```Haskell
+actionWithTimeout :: Int -> IO a -> IO (Either Timeout a)
+actionWithTimeout seconds action = do
+  reply_chan <- newChan
+  _ <- forkIO $ do -- worker thread
+    x <- action
+    writeChan reply_chan $ Right x
+  _ <- forkIO $ do -- timeout thread
+    threadDelay (seconds * 1000000)
+    writeChan reply_chan $ Left Timeout
+  readChan reply_chan
+```
+
+You will note that this is not a server in the usual sense, as it does
+not loop: it simply launches two threads.
+
+One downside of this function is that the worker thread (the one that
+runs `action`, and might take too long) is not terminated after the
+timeout. This is a problem if it is, for example, stuck in an infinite
+loop that consumes ever more memory. To fix this, we can have the
+timeout thread explicitly kill the worker thread. First we have to
+import the `killThread` function.
+
+```Haskell
+import Control.Concurrent (killThread)
+```
+
+Then we can use it as follows.
+
+```Haskell
+actionWithTimeout2 :: Int -> IO a -> IO (Either Timeout a)
+actionWithTimeout2 seconds action = do
+  reply_chan <- newChan
+  worker_tid <- forkIO $ do
+    -- worker thread
+    x <- action
+    writeChan reply_chan $ Right x
+  _ <- forkIO $ do
+    -- timeout thread
+    threadDelay (seconds * 1000000)
+    killThread worker_tid
+    writeChan reply_chan $ Left Timeout
+  readChan reply_chan
+```
+
+Note that killing a thread is a dangerous operation in general. It may
+be the case that the worker thread is stuck in some loop or waiting
+for a network request, in which case it is harmless, but killing it
+may also leave some shared state in an unspecified state. We will
+(hopefully) not encounter such cases in AP, but it is something to be
+aware of in the future.
