@@ -149,9 +149,9 @@ it represents a computation without any effects:
 For the second case, we are considering a value `Free (ReadOp g)`,
 where `g` is of type `r -> Reader r a`.  To see this, recall that the
 `Free` data constructor takes something of type `e (Free e a)` as a
-payload; setting `e = ReaderOp r`, this type becomes `ReaderOp r (Free
-(ReaderOp r) a)`, which is the same as `ReaderOp r (Reader r
-a)`. Referring back to the definition of `ReaderOp`, we conclude that
+payload; setting `e = ReadOp r`, this type becomes `ReadOp r (Free
+(ReadOp r) a)`, which is the same as `ReadOp r (Reader r
+a)`. Referring back to the definition of `ReadOp`, we conclude that
 `g` must have type `r -> Reader r a`.
 
 We can now apply `g` to the environment to obtain a `Reader r a`, which we
