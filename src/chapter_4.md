@@ -44,7 +44,7 @@ that produces a value of type `a` (like in `IO a`), and `e` describes
 the possible effects. The definition is as follows[^church]:
 
 ```Haskell
-{{#include ../haskell/free_monads.hs:Free}}
+{{#include ../haskell/Week4/Free.hs:Free}}
 ```
 
 This looks quite cryptic, but it is possible to understand based on
@@ -107,20 +107,23 @@ single effect: we can ask for the value of an *environment* (called
 `r`, then producing a value of type `a`:
 
 ```Haskell
-{{#include ../haskell/free_monads.hs:ReadOp}}
+{{#include ../haskell/Week4/Free.hs:ReadOp}}
 ```
 
-Actually, `ReadOp` can be made a `Functor`. We will see later that
-this is necessary in order to make it usable with `Free`.
+The `r -> a` value is called a *continuation*. It is a function that
+is called to resume evaluation once the requested value is ready.
+
+Further, `ReadOp` can be made a `Functor`. We will see later that this
+is necessary in order to make it usable with `Free`.
 
 ```Haskell
-{{#include ../haskell/free_monads.hs:Functor_ReadOp}}
+{{#include ../haskell/Week4/Free.hs:Functor_ReadOp}}
 ```
 
 We can use this to construct a `Reader` monad using `Free`:
 
 ```Haskell
-{{#include ../haskell/free_monads.hs:Reader}}
+{{#include ../haskell/Week4/Free.hs:Reader}}
 ```
 
 Once we have defined `Monad` instances and such for `Free`, we will be
@@ -130,7 +133,7 @@ gives meaning to its effects? We want a function of the following
 type:
 
 ```Haskell
-{{#include ../haskell/free_monads.hs:RunReader}}
+{{#include ../haskell/Week4/Free.hs:RunReader}}
 ```
 
 That is, given an initial value of type `r` and a computation of type
@@ -140,7 +143,7 @@ match on the `Reader r a` value itself. The `Pure` case is trivial, as
 it represents a computation without any effects:
 
 ```Haskell
-{{#include ../haskell/free_monads.hs:RunReader_Pure}}
+{{#include ../haskell/Week4/Free.hs:RunReader_Pure}}
 ```
 
 For the second case, we are considering a value `Free (ReadOp g)`,
@@ -155,14 +158,14 @@ We can now apply `g` to the environment to obtain a `Reader r a`, which we
 can then execute with a recursive application of `runReader`:
 
 ```Haskell
-{{#include ../haskell/free_monads.hs:RunReader_Free}}
+{{#include ../haskell/Week4/Free.hs:RunReader_Free}}
 ```
 
 We can also define Haskell functions that hide the specific encoding
 of `Reader` behind a more familiar interface:
 
 ```Haskell
-{{#include ../haskell/free_monads.hs:ask}}
+{{#include ../haskell/Week4/Free.hs:ask}}
 ```
 
 While it is perhaps not terribly interesting to define other
@@ -181,7 +184,7 @@ an `Applicative`, so let us start with `Functor`. For a value of type
 part.
 
 ```Haskell
-{{#include ../haskell/free_monads.hs:Functor_Free}}
+{{#include ../haskell/Week4/Free.hs:Functor_Free}}
 ```
 
 The `Pure` case is straightforward. For the `Free` case, we have a
@@ -201,18 +204,18 @@ Because we know that we will also be making `Free` a `Monad`, we can
 define the `<*>` method as `ap` from `Control.Monad.`
 
 ```Haskell
-{{#include ../haskell/free_monads.hs:1}}
+{{#include ../haskell/Week4/Free.hs:1}}
 ```
 
 ```Haskell
-{{#include ../haskell/free_monads.hs:Applicative_Free}}
+{{#include ../haskell/Week4/Free.hs:Applicative_Free}}
 ```
 
 Finally we can define the `Monad` instance and the `>>=` method
 itself.
 
 ```Haskell
-{{#include ../haskell/free_monads.hs:Monad_Free}}
+{{#include ../haskell/Week4/Free.hs:Monad_Free}}
 ```
 
 This definition can also be constructed largely by following the
@@ -240,6 +243,75 @@ to apply a function to the `Free e a` that is inside the `e`, meaning
 that if we have a function `h :: Free e a -> Free e b`, we can say
 `fmap h e` to obtain an `e c`. And it turns out that such an `h` is
 defined as a recursive invocation of the `>>=` method for `Free a`.
+
+### Implementing `State` in Terms of `Free`
+
+Similarly to `Reader`, it is also straightforward to define a `State`
+monad using `Free`. A state monad supports two effects: reading the
+state and writing the state:
+
+```
+{{#include ../haskell/Week4/Free.hs:StateOp}}
+```
+
+Defining a `Functor` instance for `StateOp` is similar to `ReadOp`,
+and can be done in the usual style by looking at which variables of
+which types we have available, and which must be constructed:
+
+```Haskell
+{{#include ../haskell/Week4/Free.hs:Functor_StateOp}}
+```
+
+Now we can define the monad `State` simply as `Free` applied to the
+state effects:
+
+```Haskell
+{{#include ../haskell/Week4/Free.hs:State}}
+```
+
+Evaluation of a `State` computation is also very similar to the case
+for `Reader`, and takes the form of a recursive function that
+interprets the `StateOp` effcts. When we encounter a `StatePut`, we
+discard the current state and use the provided one.
+
+```Haskell
+{{#include ../haskell/Week4/Free.hs:runState}}
+```
+
+Finally, we can define the usual `put`/`get` accessor functions.
+
+```Haskell
+{{#include ../haskell/Week4/Free.hs:put_get}}
+```
+
+On top of these, we can define the usual helper functions, such as
+`modify`, in the way discussed in chapter 2.
+
+### Implementing an Error Monad
+
+As another example, consider a free monad with error handling, very
+similar to that provided by `Either`. Here we support two effects:
+throwing an error and catching an error:
+
+```Haskell
+{{#include ../haskell/Week4/Free.hs:Error}}
+```
+
+The interpretation function `runError` is a little more sophisticated
+than the ones we saw before, as some control flow is now required to
+handle the error cases. However, it is fundamentally very similar to
+the bind method we have seen previously for the `Either` monad.
+
+```Haskell
+{{#include ../haskell/Week4/Free.hs:runError}}
+```
+
+Finally, we can define the usual boilerplate accessor functions for
+using the effects:
+
+```Haskell
+{{#include ../haskell/Week4/Free.hs:throw_catch}}
+```
 
 ## The IO Monad
 
@@ -643,3 +715,267 @@ unstructured ways from multiple concurrent threads. Programming with
 programming with mutable state.
 
 ~~~
+
+## Free Monads with IO
+
+The example of free monads we saw above are perhaps a bit contrived,
+as they merely involved replicating existing monads. In practice, we
+often use free monads to abstract over complicated effects, typically
+those in IO. Let us look at some use cases. By the constraints of
+these notes, they will still be somewhat contrived (we can't fit an
+actual production system here), but they will be more interesting than
+spelling `State` in a new way.
+
+### An Uncontrived Real World Example
+
+To start out with, let us consider one of the most interesting and
+useful functions, the recursive Fibonacci function:
+
+```Haskell
+fib :: Int -> Int
+fib 0 = 1
+fib 1 = 1
+fib n = fib (n - 1) + (n - 2)
+```
+
+One common requirement when writing software is *logging*, yet we do
+not wish every function to depend on some specific implementation on
+module. In particular, logging typically requires IO, and we don't
+want every single function to live in the `IO` monad. Free monads are
+a handy way to abstract out the notion of logging. Let us define a
+type `FibOp` that encapsulates the effects that we need in our `fib`
+function; currently restricted to merely logging.
+
+```Haskell
+data FibOp a = FibLog String a
+
+instance Functor FibOp where
+  fmap f (FibLog s x) = FibLog s $ f x
+```
+
+Now we can define a `FibM` monad that supports `FibOp` effects, with
+an accessor function `fibLog`:
+
+```Haskell
+type FibM a = Free FibOp a
+
+fibLog :: String -> FibM ()
+fibLog s = Free $ FibLog s $ pure ()
+```
+
+And finally we can use it in our definition of `fib`:
+
+```Haskell
+fib :: Int -> FibM Int
+fib 0 = pure 1
+fib 1 = pure 1
+fib n = do
+  fibLog $ "fib(" ++ show n ++ ")"
+  x <- fib (n - 1)
+  y <- fib (n - 2)
+  pure $ x + y
+```
+
+One of the interesting parts of the `FibM` monad is that there are
+many legitimate and interesting ways to interpret it (in contrast to
+`Reader` or `State`, which have only a single sensible
+interpretation). One obvious one is to interpret it in the `IO` monad,
+where the logging messages are printed as lines:
+
+```Haskell
+ioFibM :: FibM a -> IO a
+ioFibM (Pure x) = pure x
+ioFibM (Free (FibLog s x)) = do
+  putStrLn s
+  ioFibM x
+```
+
+Example use:
+
+```
+> ioFibM $ fib 5
+fib(5)
+fib(4)
+fib(3)
+fib(2)
+fib(2)
+fib(3)
+fib(2)
+8
+```
+
+In a real application, we might log to the file system or some
+dedicated logging daemon (and probably, we would be computing
+something more interesting than Fibonacci numbers), but this is
+decoupled from the *users* of the `fibLog` effect.
+
+But another useful interpretation function is one that just discards
+the logging messages - and is pure:
+
+```Haskell
+pureFibM :: FibM a -> a
+pureFibM (Pure x) = x
+pureFibM (Free (FibLog _ c)) = pureFibM c
+```
+
+```
+> pureFibM $ fib 5
+8
+```
+
+And yet another useful interpretation is a pure one that accumulates
+the log messages in a list.
+
+```Haskell
+logFibM :: FibM a -> (a, [String])
+logFibM (Pure x) = (x, [])
+logFibM (Free (FibLog s c)) =
+  let (x', msgs) = logFibM c
+   in (x', msgs ++ [s])
+```
+
+```
+> logFibM $ fib 5
+(8,["fib(2)","fib(3)","fib(2)","fib(2)","fib(3)","fib(4)","fib(5)"])
+```
+
+It is easy to imagine how this could be useful for testing the pure
+logic for logging, without actually interacting with a complicated
+logging infrastructure.
+
+### Adding Another Effect
+
+Above we saw how we could interpret the same effectful function
+(`fib`) in three different ways, without modifying `fib` at all. Let
+us now add another effect. One problem with the recursive Fibonacci
+function is that it is very slow, as it redundantly recomputes the
+same recursive invocations over and over again. If you execute
+`pureFibM $ fib 25` at the `ghci` prompt, you will likely wait several
+seconds before you get a response.
+
+One way to improve the performance of recursive computations with many
+shared subresults is *memoisation*, where we maintain a cache mapping
+function arguments to results. Then, whenever we encounter an argument
+we have seen before, we merely retrieve the result that was computed
+last time again.
+
+Memoisation is notoriously inconvenient to implement in pure
+languages, because of the need to maintain a state. The idea behind
+memoisation is that the effect of the cache is not *observable*, but
+merely speeds up the computation, but Haskell does not know that.
+Instead, we have to manually manage the cache of previous results,
+which raises additional questions, such as when to expire cache
+entries in order to avoid space leaks. It's a rather complicated
+space, and intermingling memoisation logic with algorithmic logic is
+likely to result in a mess.
+
+Instead, let us augment the `FibM` monad to handle memoisation. First,
+we add a new kind of effect to `FibOp`, namely `FibMemo`:
+
+```Haskell
+data FibOp a
+  = FibLog String a
+  | FibMemo Int (FibM Int) (Int -> a)
+```
+
+The `FibMemo` constructor has three components:
+
+1. An integer `n` denoting that this effect refers to the result of
+   computing `fib(n)`.
+
+2. A `FibM Int` computation that computes `fib(n)` if executed.
+
+3. A continuation `Int -> a` that should be invoked with the result of
+   the computation stored in the `FibM Int` - or a memoised version if
+   available.
+
+The instance definition and the accessor functions are fairly
+straightforward; strongly resembling those we have seen before.
+
+```
+instance Functor FibOp where
+  fmap f (FibLog s x) = FibLog s $ f x
+  fmap f (FibMemo n m c) = FibMemo n m $ \y -> f (c y)
+
+fibMemo :: Int -> FibM Int -> FibM Int
+fibMemo n m = Free $ FibMemo n m pure
+```
+
+The idea behind `fibMemo` is that we use it to wrap a computation, for
+example like so:
+
+```Haskell
+fib :: Int -> FibM Int
+fib 0 = pure 1
+fib 1 = pure 1
+fib n = fibMemo n $ do
+  fibLog $ "fib(" ++ show n ++ ")"
+  x <- fib (n - 1)
+  y <- fib (n - 2)
+  pure $ x + y
+```
+
+The operational idea is that whenever the `fib n` case is reached, we
+want to look if an existing result for `n` has already been computed.
+If so, we return it. If not, we compute the result using the provided
+computation. Of course, whether that is *actually* what happens
+depends on how we write our interpreter function for `FibM`. For
+example, we can add support for `FibMemo` to `pureFibM` in a way that
+does not actually perform any memoisation:
+
+```Haskell
+pureFibM :: FibM a -> a
+pureFibM (Pure x) = x
+pureFibM (Free (FibMemo _ x c)) = pureFibM $ c $ pureFibM x
+pureFibM (Free (FibLog _ c)) = pureFibM c
+```
+
+But of course, that rather defeats the purpose of `FibMemo`. Instead,
+we can write an interpretation function `memoFibM` that carries around
+a cache of type `[(Int,Int)]`, in which memoisation results are
+stored. We implement this by using a local helper function that
+accepts and returns the state, and then we discard the final state at
+the end.
+
+```Haskell
+memoFibM :: FibM a -> a
+memoFibM m = fst $ memo [] m
+  where
+    memo :: [(Int, Int)] -> FibM a -> (a, [(Int, Int)])
+    memo cache (Pure x) = (x, cache)
+    memo cache (Free (FibMemo n fn c)) =
+      case lookup n cache of
+        Just res -> memo cache $ c res
+        Nothing ->
+          let (fn', cache') = memo cache fn
+           in memo ((n, fn') : cache') (c fn')
+    memo cache (Free (FibLog _ x)) =
+      memo cache x
+```
+
+In the `FibMemo` case, we check whether a result for `n` is already
+known, and if so, we return it. Otherwise we compute it by executing
+`fn`. Note that `memo` could also be implemented using the `State`
+monad, as the way we handle the cache is identical to how `State`
+handles state.
+
+Now even large applications of `fib` finish almost instantaneously, as
+memoisation transforms the exponential complexity to linear:
+
+```
+> memoFibM $ fib 1000
+9079565065540428013
+```
+
+Although `memoFibM` is a rather simplistic way of handling
+memoisation, in that the cache is not persistent across multiple
+invocations, it is not difficult to conceive of a variant that uses
+`IO` to store memoisation results in a database or on the file system,
+perhaps with limitations on the maximum size of stored results, or
+some expiry policy that removes entries after a time. All of these
+changes can be made without modifying `fib` itself.
+
+Another useful change would be to allow memoisation of arguments and
+results that are not exclusively of type `Int` (or some other fixed
+type). This is not particularly difficult, although somewhat more
+verbose, and so we have left it out of the exposition here.
