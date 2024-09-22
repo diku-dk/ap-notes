@@ -632,10 +632,10 @@ pBool :: Parser Bool
 pBool =
   choice
     [ do
-        lKeyword "true"
+        chunk "true"
         pure True,
       do
-        lKeyword "false"
+        chunk "false"
         pure False
     ]
 
