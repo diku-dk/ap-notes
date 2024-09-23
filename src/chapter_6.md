@@ -60,7 +60,7 @@ and
 The latter is implicitly re-exported by the former. As always, we will
 use only a fairly small subset of the facilities provided by the
 Haskell standard library. You are welcome (and encouraged) to peruse
-the documentation to enligteh yourself, but in this particular case
+the documentation to enlighten yourself, but in this particular case
 you should be careful not to be tempted by functions that subvert the
 notion of message-passing.
 
