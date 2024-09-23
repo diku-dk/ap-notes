@@ -105,7 +105,7 @@ spawn server initial = do
 
 ### Channels
 
-~~~admonish Warning
+~~~admonish warning
 **TODO:** Write some words that explains the code
 ~~~
 
@@ -136,7 +136,7 @@ multiple writers.
 
 ### Request-Reply Pattern
 
-~~~admonish Warning
+~~~admonish warning
 **TODO:** Write some words that explains the code
 ~~~
 
@@ -151,7 +151,7 @@ requestReply serv con = do
 
 ## Method
 
-~~~admonish Warning
+~~~admonish warning
 **TODO:** Elaborate on the method
 ~~~
 
