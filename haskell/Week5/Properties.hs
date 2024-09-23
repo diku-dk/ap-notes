@@ -20,3 +20,23 @@ prop_appendCommutative xs ys = xs ++ ys == ys ++ xs
 
 -- ANCHOR_END: Prop_AppendCommutative
 
+-- ANCHOR: List1
+list1 :: Gen a -> Gen [a]
+list1 g = oneof [pure [], (:) <$> g <*> list1 g]
+
+-- ANCHOR_END: List1
+
+-- ANCHOR: List2
+list2 :: Gen a -> Gen [a]
+list2 g = frequency [(1, pure []), (9, (:) <$> g <*> list1 g)]
+
+-- ANCHOR_END: List2
+
+-- ANCHOR: List3
+list3 :: Gen a -> Gen [a]
+list3 g = abs <$> (arbitrary :: Gen Int) >>= go
+    where
+        go 0 = pure []
+        go n = (:) <$> g <*> go (n - 1)
+
+-- ANCHOR_END: List3

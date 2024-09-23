@@ -125,10 +125,118 @@ gs` chooses one of the generators with equal probability. For instance `oneof
 probability, but `oneof [pure "heads", pure "tails", pure "tails"]` is biased
 in favour of `"tails"`.
 
+It is also possible to explicitly specify the bias using `frequency`, which is
+like `oneof` but allows specifying the weight of each option. The biased
+example using `oneof` would written more idiomatically as `frequency [(1, pure
+"heads"), (2, pure "tails")]`.
+
 QuickCheck has a function called `sample` which takes a generator and prints 10
 example values. This is quite useful to get a rough sense of what a generator
 produces and is often sufficient to spot simple biases like in the previous
 example.
+
+### Recursive Generators
+
+QuickCheck has a combinator called `listOf` which generates `[a]` given a
+generator for `a`. Let us generate a list of integers using the standard
+integer generator given by its arbitrary instance. An example output is:
+
+```
+> sample $ listOf (arbitrary :: Gen Integer)
+[]
+[-1]
+[2,1]
+[-6,1,-6,-1]
+[6]
+[7,-10,8,2,-7,0,-7]
+[-5,-4,-6,-5,-3,-2,-5,6,-7,-5,-6]
+[]
+[-11,2,7,-16,-11,11,-14,5,-12,13,12]
+[18,-13,17,-9,-16]
+[20,8,-12,-4,16,8,7,4,-20,-1,-6,8,6,16,14,-8,14,-6,-1]
+```
+
+Note that there is a decent spread both in the length of the list and the
+individual integer values. How would we go about implementing a combinator like
+`listOf`? A first attempt might be:
+
+```Haskell
+{{#include ../haskell/Week5/Properties.hs:List1}}
+```
+
+Alas, the distribution leaves something to be desired:
+
+```
+> sample $ list1 (arbitrary :: Gen Integer)
+[]
+[]
+[0,1]
+[4]
+[-7,-4]
+[]
+[5,-8]
+[1]
+[]
+[]
+[8]
+```
+
+Every other sample is an empty list, which makes this generator inefficient for
+exploring the search space. It should not be a huge surprise, however, since
+the empty list is one of the two options to `oneof`.
+
+A second attempt might be to use `frequency` to introduce a bias towards longer
+lists:
+
+```Haskell
+{{#include ../haskell/Week5/Properties.hs:List2}}
+```
+
+The resulting distribution is better, but still heavily favours short lists
+with an occasional longer list.
+
+```
+> sample $ list2 (arbitrary :: Gen Integer)
+[0]
+[2,0]
+[-2]
+[1,5,4]
+[0,6,-4]
+[5,-2,-6,-3,-5]
+[-4]
+[-2]
+[-11]
+[-11]
+[16]
+```
+
+We could try adjusting the bias, but no matter what value we use the length of
+the list will follow an *exponential* distribution, which is not really what we
+want.
+
+For our third attempt, we exploit the fact that `Gen` is a monad. First
+generate a non-negative integer `n`, and then generate a list of length `n`:
+
+```Haskell
+{{#include ../haskell/Week5/Properties.hs:List3}}
+```
+
+Now the distribution is similar to QuickCheck's `listOf`. 
+
+```
+> sample $ list3 (arbitrary :: Gen Integer)
+[]
+[-2,-1]
+[]
+[-5,0,6,-2]
+[-8,-1,-6,5,5,8,4,8]
+[2,1,-8,-2,7,-6,-7,-5,-8,-10]
+[2,4,2,4,5,-12,5,-5,12,-4,-2,-1]
+[2,11,-10,6,-3,3,-8,11,9,9,7]
+[6,13,9,6,3,3,6,13,-10,-4,2,-16,-9,-16,0]
+[6,-10,12,-5,-12,14]
+[-14,0]
+```
 
 ### Size Dependent Generators
 
