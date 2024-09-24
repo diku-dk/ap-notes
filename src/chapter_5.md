@@ -13,7 +13,7 @@ and `(++)`. This holds in general, but for concreteness consider lists of
 integers. For any two lists `xs :: [Integer]` and `ys :: [Integer]` we have
 
 ```Haskell
-length (xs ++ ys) == length xs + length ys
+length (xs ++ ys) = length xs + length ys
 ```
 
 Another way of stating the same thing is that the function
@@ -31,7 +31,7 @@ returns `True` for all possible arguments. We could come up with a number of tes
 and test with something like `all (\(xs, ys) -> prop_lengthAppend xs ys)
 tediousTestCases`, but this is quite tedious. QuickCheck automates this tedium
 away by generating (somewhat) random inputs. Simply running `quickCheck
-prop_lengthAppend` covers more cases than any unit test suite that we would
+prop_lengthAppend` covers more cases than any unit test suite we would
 realistically have the patience to maintain. The default is 100 tests, but if we want more we can run e.g.
 
 ```Haskell
@@ -49,7 +49,7 @@ Consider another property, stating that `(++)` is commutative:
 Running `quickCheck prop_appendCommutative` quickly falsifies this theory and
 prints out a counterexample such `[0]` and `[1]`. QuickCheck is very useful
 when we are genuinely unsure whether a property holds, since in practice false
-properties usually have easy-to-find counterexamples.
+properties often have easy-to-find counterexamples.
 
 ### The Value of Properties
 
@@ -89,7 +89,7 @@ going over:
 * `a -> b` is testable if `a` is `Arbitrary` (meaning that we have a way of
   generating values of that type; see the next section) and `b` is `Testable`.
   The semantics is that `f :: a -> b` succeeds if `f x :: b` succeeds for all
-  `x :: a`. In practice this is tested by generated random values of `a`. Note
+  `x :: a`. In practice this is tested by generating random values of `a`. Note
   that this instance applies recursively so e.g. `Integer -> Integer -> Bool`
   is `Testable` because `Integer -> Bool` is `Testable` because `Bool` is
   `Testable`.
@@ -116,7 +116,7 @@ understand generators.
 As a first approximation the type `Gen a` represents a probability distribution
 over elements of `a`. It can also be thought of as a computation that can
 depend on random choices. Generators are defined using a combination of
-primitives and the fact that `Gen` is a monad.
+primitives and monad operations.
 
 The simplest generator is `pure x` which produces the value `x` with
 probability 1. Given a list of generators `gs :: [Gen a]` the generator `oneof
@@ -125,7 +125,7 @@ gs` chooses one of the generators with equal probability. For instance `oneof
 probability, but `oneof [pure "heads", pure "tails", pure "tails"]` is biased
 in favour of `"tails"`.
 
-It is also possible to explicitly specify the bias using `frequency`, which is
+It is also possible to explicitly control the bias using `frequency`, which is
 like `oneof` but allows specifying the weight of each option. The biased
 example using `oneof` would written more idiomatically as `frequency [(1, pure
 "heads"), (2, pure "tails")]`.
@@ -139,7 +139,7 @@ example.
 
 QuickCheck has a combinator called `listOf` which generates `[a]` given a
 generator for `a`. Let us generate a list of integers using the standard
-integer generator given by its arbitrary instance. An example output is:
+integer generator given by its `Arbitrary` instance. An example output is:
 
 ```
 > sample $ listOf (arbitrary :: Gen Integer)
@@ -183,7 +183,7 @@ Alas, the distribution leaves something to be desired:
 
 Every other sample is an empty list, which makes this generator inefficient for
 exploring the search space. It should not be a huge surprise, however, since
-the empty list is one of the two options to `oneof`.
+the empty list is one of the two options to `oneof`. Thus 50% of lists will be empty, another 25% will have just a single element and so on.
 
 A second attempt might be to use `frequency` to introduce a bias towards longer
 lists:
@@ -240,4 +240,35 @@ Now the distribution is similar to QuickCheck's `listOf`.
 
 ### Size Dependent Generators
 
+When testing a property it is often a good idea to start with small values and
+then gradually increase the complexity of the test cases. QuickCheck uses this
+approach by giving generators access to a `size` parameter (similar to a
+`Reader` monad) which under default settings starts at 0 and increases by 1
+every test up to a maximum of 99.
+
+The size can be accessed directly using `getSize :: Gen Int` but usually a
+neater approach is to use the combinator `sized :: (Int -> Gen a) -> Gen` which
+turns a size-dependent generator into an ordinary one. A good generator
+respects the `size` parameter, so our list generator is more idiomatically
+written as:
+
+```Haskell
+{{#include ../haskell/Week5/Properties.hs:List4}}
+```
+
+This is essentially the definition of `listOf` in QuickCheck (where `go` is
+known as `vectorOf`).
+
+## Shrinking
+
 ## Tasty QuickCheck
+
+The Tasty testing framework has support for QuickCheck via the package
+`tasty-quickcheck`. For example, `testProperties "properties" props` is a
+simple test tree, given `props :: [(String, Property)]`.
+
+This test tree exposes options for Tasty on the command line. For example, to control the number of tests we can run
+
+```
+$ cabal test --test-option --quickcheck-tests=10000
+```

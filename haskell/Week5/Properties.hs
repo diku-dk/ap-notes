@@ -40,3 +40,12 @@ list3 g = abs <$> (arbitrary :: Gen Int) >>= go
         go n = (:) <$> g <*> go (n - 1)
 
 -- ANCHOR_END: List3
+
+-- ANCHOR: List4
+list4 :: Gen a -> Gen [a]
+list4 g = sized $ \n -> chooseInt (0, n) >>= go
+    where
+        go 0 = pure []
+        go n = (:) <$> g <*> go (n - 1)
+
+-- ANCHOR_END: List4
