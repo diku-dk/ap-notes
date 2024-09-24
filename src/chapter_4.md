@@ -63,10 +63,10 @@ monad. This is what allows separation of concerns.
 
 The `e (Free e a)` part merits elaboration, as this is the first time
 we have seen a datatype that applies one of its type parameters to
-another type. This is an instance of "higher-rank polymorphism", where
+another type. This is an instance of "higher-order polymorphism", where
 we abstract not over *types*, but *type constructors*. While this is
 the first time we have seen this in a data type definition, it is not
-the first time we see higher-rank polymorphism at all. Recall the
+the first time we see higher-order polymorphism at all. Recall the
 `Functor` type class:
 
 ```Haskell
@@ -76,8 +76,8 @@ class Functor f where
 
 Intuitively, if a data type is a `Functor`, that means it is a kind of
 "container" with "elements", and we can apply an arbitrary function on
-these elements. But importantly, `e` by itself *is not a
-type*[^higher-rank], but a *type constructor* that must be applied to
+these elements. But importantly, `f` by itself *is not a
+type*[^higher-order], but a *type constructor* that must be applied to
 an argument (such as in `f a` and `f b`) to form a type. Our use of
 `e` in the definition of `Free` works exactly the same way.
 
@@ -87,7 +87,7 @@ Haskell, but it is the simplest one. More efficient definitions exist
 [Control.Monad.Free.Church](https://hackage.haskell.org/package/free-5.2/docs/Control-Monad-Free-Church.html)),
 but they are more complicated, and unnecessary for our purposes.
 
-[^higher-rank]: Just like how values can be classified with types, so
+[^higher-order]: Just like how values can be classified with types, so
 can types be classified with "types of types", which in Haskell are
 called *kinds*. A normal type such as `Int` has kind `Type` (`Type` is
 often written `*` for historical reasons), while a type constructor
