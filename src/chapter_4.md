@@ -739,12 +739,12 @@ fib n = fib (n - 1) + (n - 2)
 ```
 
 One common requirement when writing software is *logging*, yet we do
-not wish every function to depend on some specific implementation on
-module. In particular, logging typically requires IO, and we don't
-want every single function to live in the `IO` monad. Free monads are
-a handy way to abstract out the notion of logging. Let us define a
-type `FibOp` that encapsulates the effects that we need in our `fib`
-function; currently restricted to merely logging.
+not wish every function to depend on some specific implementation of a
+logging system. In particular, logging typically requires IO, and we
+don't want every single function to live in the `IO` monad. Free
+monads are a handy way to abstract out the notion of logging. Let us
+define a type `FibOp` that encapsulates the effects that we need in
+our `fib` function; currently restricted to merely logging.
 
 ```Haskell
 data FibOp a = FibLog String a
