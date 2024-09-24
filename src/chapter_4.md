@@ -418,7 +418,7 @@ types of functions. However, not all errors are represented, or *can*
 be represented, in this way. For example, the `div` function has the
 following type:
 
-```
+```Haskell
 div :: Integral a => a -> a -> a
 ```
 
