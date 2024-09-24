@@ -250,7 +250,7 @@ Similarly to `Reader`, it is also straightforward to define a `State`
 monad using `Free`. A state monad supports two effects: reading the
 state and writing the state:
 
-```
+```Haskell
 {{#include ../haskell/Week4/Free.hs:StateOp}}
 ```
 
