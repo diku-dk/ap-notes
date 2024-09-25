@@ -30,13 +30,18 @@ returns `True` for all possible arguments. We could come up with a number of tes
 
 and test with something like `all (\(xs, ys) -> prop_lengthAppend xs ys)
 tediousTestCases`, but this is quite tedious. QuickCheck automates this tedium
-away by generating (somewhat) random inputs. Simply running `quickCheck
-prop_lengthAppend` covers more cases than any unit test suite we would
-realistically have the patience to maintain. The default is 100 tests, but if we want more we can run e.g.
+away by generating (somewhat) random inputs. The workhorse is `quickCheck`
+which accepts something `Testable` (explained later) runs it with a number of
+different inputs. Simply running `quickCheck prop_lengthAppend` covers more
+cases than any unit test suite we would realistically have the patience to
+maintain. The default is 100 tests, but if we want more we can run e.g.
 
 ```Haskell
 quickCheck $ withMaxSuccess 10000 prop_lengthAppend
 ```
+
+Of course, no amount of test cases is enough to argue total correctness, but
+tuning the amount of tests allows us to trade time for certainty.
 
 ### Counterexamples
 
@@ -91,7 +96,7 @@ going over:
   The semantics is that `f :: a -> b` succeeds if `f x :: b` succeeds for all
   `x :: a`. In practice this is tested by generating random values of `a`. Note
   that this instance applies recursively so e.g. `Integer -> Integer -> Bool`
-  is `Testable` because `Integer -> Bool` is `Testable` because `Bool` is
+  is `Testable` because `Integer -> Bool` is `Testable`; and `Integer -> Bool` is `Testable` because `Bool` is
   `Testable`.
 
 This works great. We can write down properties using familiar Haskell types
