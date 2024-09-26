@@ -123,7 +123,7 @@ channel. If the channel is empty, reading blocks until a message is
 available.
 
 
-~~~admonish warning
+~~~admonish warning title='WIP: Text can be improved'
 **TODO:** Write some words that explains the code
 ~~~
 
@@ -153,7 +153,7 @@ is outside the scope of these notes.
 
 ### Request-Reply Pattern
 
-~~~admonish warning
+~~~admonish warning title='WIP: Text can be improved'
 **TODO:** Write some words that explains the code
 ~~~
 
@@ -236,8 +236,8 @@ counter, to *increment* the counter by one, or to *decrement* the
 counter by positive amount `n`. We will maintain the invariant that
 the counter is always non-negative.
 
-~~~admonish warning
-**TODO:** Maybe explain why this is a useful server. For instance it
+~~~admonish warning title='WIP: Text can be improved'
+Maybe explain why a counter server is a useful server. For instance it
 can be used to dynamically bound a resource, such a the number of
 threads started when traversing a tree.
 ~~~
