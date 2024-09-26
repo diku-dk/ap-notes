@@ -1,8 +1,18 @@
-module Main where
+module Main
+  ( CounterServer
+  , newCounter
+  , getValue
+  , incr
+  , decr
+
+  , main
+  )
+where
 
 import qualified Genserver as GS
 import Control.Monad (replicateM_)
 
+type InternalData = Int
 
 -- ANCHOR: CounterMsg
 data Msg = GetValue (GS.Chan Int)
@@ -29,6 +39,7 @@ decr _ _ = error "Cannot decrement with negative amount"
 -- ANCHOR_END: CounterAPI
 
 -- ANCHOR: CounterLoop
+counterLoop :: GS.Chan Msg -> InternalData -> IO ()
 counterLoop input state = do
   msg <- GS.receive input
   case msg of
