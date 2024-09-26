@@ -49,3 +49,22 @@ list4 g = sized $ \n -> chooseInt (0, n) >>= go
         go n = (:) <$> g <*> go (n - 1)
 
 -- ANCHOR_END: List4
+
+-- ANCHOR: Pair
+data Pair a b = Pair a b
+    deriving Show
+
+-- ANCHOR: PairShrink
+instance (Arbitrary a, Arbitrary b) => Arbitrary (Pair a b) where
+    arbitrary = Pair <$> arbitrary <*> arbitrary
+
+-- ANCHOR_END: Pair
+    shrink (Pair x y) = [Pair x' y | x' <- shrink x] ++ [Pair x y' | y' <- shrink y]
+
+-- ANCHOR_END: PairShrink
+
+-- ANCHOR: Prop_AppendCommutativePair
+prop_appendCommutative' :: Pair [Integer] [Integer] -> Bool
+prop_appendCommutative' (Pair xs ys) = xs ++ ys == ys ++ xs
+
+-- ANCHOR_END: Prop_AppendCommutativePair

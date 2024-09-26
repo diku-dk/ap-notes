@@ -266,13 +266,67 @@ known as `vectorOf`).
 
 ## Shrinking
 
+Suppose we define our own type of pairs with an instance of `Arbitrary`:
+
+```Haskell
+{{#include ../haskell/Week5/Properties.hs:Pair}}
+```
+
+We can now define a version of commutativity for `(++)` that takes the input as
+a `Pair`:
+
+```Haskell
+{{#include ../haskell/Week5/Properties.hs:Prop_AppendCommutativePair}}
+```
+
+QuickCheck still finds a counterexample. A possible output is:
+
+```
+> quickCheck prop_appendCommutative'
+*** Failed! Falsified (after 5 tests):
+Pair [-2,1,3,-2] [-4,4,-1,2]
+```
+
+However, the counterexample is not as simple as the counterexample to our
+original property. Running `quickCheck` multiple times will reveal that
+`prop_appendCommutative` consistently produces small counterexamples while
+`prop_appendCommutative'` produces counterexamples of various sizes.
+
+The secret ingredient is *shrinking*. The `Arbitrary` type class also defines a
+member `shrink :: a -> [a]` which takes a value and produces a list of
+*shrinks*, i.e. "slightly smaller" values. The idea is that if `x` is a
+counterexample to some property then any of the elements in the list `shrink x`
+could also be counterexamples.
+
+When QuickCheck finds a counterexample `x` it tests the property for each
+shrink of `x`. If that result in another, by definition simpler, counterexample
+the process repeats recursively until the (locally) simplest counterexample is
+reached.
+
+For a value `Pair x y` a natural notion of "slighty smaller" is a pair which is
+slightly smaller in *either* the first component *or* the second component. The
+complete `Arbitrary` instance is thus:
+
+```Haskell
+{{#include ../haskell/Week5/Properties.hs:PairShrink}}
+```
+
+Why not shrink both components simultaneously? Well, suppose `x'` is slighty
+smaller than `x` and `y'` is slightly smaller than `y`. Then `Pair x' y'` is
+slightly smaller than `Pair x y'` (or `Pair x' y`) which in turn is slightly
+smaller than `Pair x y` so assuming that either `Pair x y'` or `Pair x' y` is
+also a counterexample the process would reach `Pair x' y'` in two steps. In
+general, there is a trade-off between efficiency (i.e. not producing too many
+shrinks) and likelihood of finding the very simplest counterexample.
+
 ## Tasty QuickCheck
 
 The Tasty testing framework has support for QuickCheck via the package
 `tasty-quickcheck`. For example, `testProperties "properties" props` is a
 simple test tree, given `props :: [(String, Property)]`.
 
-This test tree exposes options for Tasty on the command line. For example, to control the number of tests we can run
+This test tree exposes options for Tasty on the command line. For example, to
+control the number of tests we can run
 
 ```
 $ cabal test --test-option --quickcheck-tests=10000
