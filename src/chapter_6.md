@@ -204,11 +204,113 @@ requestReply serv con = do
 5. Implement API functions
 
 
+## Worked Example
+
+In this example we want to make a server that keeps track of a count,
+a *counter server*. It should be possible to *get the value* of the
+counter, to *increment* the counter by one, or to *decrement* the
+counter by positive amount `n`. We will maintain the invariant that
+the counter is always non-negative.
+
+~~~admonish warning
+**TODO:** Maybe explain why this is a useful server. For instance it
+can be used to dynamically bound a resource, such a the number of
+threads started when traversing a tree.
+~~~
+
+### Step 1: Internal state
+
+The server should keep track of an integer as the internal state:
+
+```haskell
+type InternalData = Int
+```
+
+### Step 2: API functions
+
+The API for the counter server is:
+
+ * `newCounter initial` for creating a new counter server with the
+   initial value `initial`. It is an error if `initial` is negative.
+
+ * `getVale cnt` for getting the value of the counter server,
+   `cnt`. This is a *blocking* function, because we need to wait for a
+   result.
+
+ * `incr cnt` for incrementing the value of the counter server, `cnt`,
+   by one. This is a *non-blocking* function, because it cannot fail
+   and we don't need to wait for a result.
+
+ * `decr cnt n` for decrementing the value of the counter server,
+   `cnt`, by `n`. This is a *blocking* function, because it can fail
+   if `n` is larger than the current value of the counter
+   server. Thus, we need to wait for a result that tells us if the
+   function succeeded.
+
+   Note, this is the interesting function of the example. Because it
+   isn't clear what it should mean to decrement a counter with too
+   large an amount. We have two options:
+
+   1. The function blocks for a short amount of time, and reports if
+      the decrement was successful or not (our choice for now). We
+      sometimes call this *limited blocking*.
+
+   2. The function blocks until it is possible to decrement the
+      counter with the given amount. This means that the function
+      might block forever (in principle). We call this *unlimited
+      blocking*.
+
+### Step 3: A type for messages
+
+This step is to make an internal type for the messages that will be
+send to the server. We use the pattern where we make constructor for
+each kind of message and the argument to be send with that kind
+message. If there is an expected reply to given kind of message, we
+use the convention that the last argument for that constructor is a
+channel for sending back the response.
+
+For the counter server we have a message for each of the interface
+functions and don't have any internal messages:
+
+```haskell
+{{#include ../haskell/concurrency/genserver/src-exe/Counter.hs:CounterMsg}}
+```
+
+Note how the messages for the blocking functions `getValue` and `decr`
+have a channel as the last argument.
+
+### Step 4: Implement the server-loop function
+
+The server-loop function for a counter server is:
+
+```Haskell
+{{#include ../haskell/concurrency/genserver/src-exe/Counter.hs:CounterLoop}}
+```
+
+
+### Step 5: Implement API functions
+
+The API functions for a counter server can now be implemented straight
+forward by using the `spawn`, `sendTo` and `requestReply` functions
+from the `Genserver` module:
+
+```Haskell
+{{#include ../haskell/concurrency/genserver/src-exe/Counter.hs:CounterAPI}}
+```
+
+
+### Example use of a counter server
+
+```haskell
+{{#include ../haskell/concurrency/genserver/src-exe/Counter.hs:CounterExample}}
+```
+
+
 
 ## Timeouts
 
 ~~~admonish warning
-**TODO:** This section is work in progress and is not using th right
+**TODO:** This section is work in progress and is not using the right
 terminology, yet.
 ~~~
 
