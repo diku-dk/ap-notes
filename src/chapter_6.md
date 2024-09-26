@@ -164,27 +164,71 @@ is outside the scope of these notes.
 
 ## Method
 
-~~~admonish warning
-**TODO:** Elaborate on the method
-~~~
+Following is a five step method to systematically designing and
+implementing a server. The steps are presented as sequential phases,
+but in practise there will be a bit of going back and forward between
+steps.
+
+1. Determine what data (the internal state) the server should keep
+   track of, declare a type for this.
+
+   If you lack imagination for a name for this type you can always go
+   with `InternalData`.
+
+2. Determine the interface for the server. That is, a set of functions
+   where each function takes the server as the first argument and
+   possibly other arguments as well. Furthermore, for each function we
+   should determine if the function is *blocking* or *non-blocking*.
+
+   In general a function is *blocking* if we need to wait for a
+   result depending on the state of the server.
+
+   The blocking behaviour can sometimes be refined into *limited
+   blocking* if there is some upper limit on how long a function can
+   be blocked. We might not know what exactly the upper limit is (as
+   it might depend on various system specific constants and dynamic
+   behaviours). Or *unlimited blocking* if the function might block
+   forever.
+
+   These functions is the external interface for the server.
+
+3. Declare an internal type for the kind of messages (both external
+   messages and internal messages) that a server can receive.
+
+   We use the pattern where we make constructor for each kind of
+   message and the argument to be send with that kind message. If
+   there is an expected reply to given kind of message, we use the
+   convention that the last argument for that constructor is a channel
+   for sending back the response. This convention is to make sure that
+   we can use the `requestReply` function without too much bother.
+
+4. Implement a *server-loop* function.
+
+   We use the convention that a server-loop function should take the
+   input channel for the server as the first argument and the initial
+   value for the internal data as the second argument. This convention
+   makes it convenient to use the `spawn` function.
+
+   The server loop will usually start by receiving a message on the
+   input channel and then use a `case`-expression to pattern match on
+   each kind of message and determine what action to do. Each action
+   will usually compute a (potentially unchanged) internal state, and
+   potentially send some messages, for instance replies to requests.
+
+5. Implement API functions.
+
+   When we have declared the type for messages and implemented the
+   server loop, the last step is to implement the API functions. Where
+   we use `requestReply` for each blocking function and `sendTo` for
+   each non-blocking function.
+
+It is best practise to declare each server in a separate module. Thus
+when we talk about *internal* types and functions, it is types and
+functions not exported from the module.
 
 
-1. Determine what data (the state) the server should keep track of,
-   declare a type for this.
 
-2. Determine the interface for the server, that is a set of functions:
-
-   - The type of each function
-   - If the function is *blocking* or *non-blocking*
-
-3. Declare a message type
-
-4. Implement a *server-loop* function
-
-5. Implement API functions
-
-
-## Worked Example
+## Worked Example: Counter Server
 
 In this example we want to make a server that keeps track of a count,
 a *counter server*. It should be possible to *get the value* of the
@@ -233,7 +277,7 @@ The API for the counter server is:
 
    1. The function blocks for a short amount of time, and reports if
       the decrement was successful or not (our choice for now). We
-      sometimes call this *limited blocking*.
+      call this *limited blocking*.
 
    2. The function blocks until it is possible to decrement the
       counter with the given amount. This means that the function
@@ -243,11 +287,7 @@ The API for the counter server is:
 ### Step 3: A type for messages
 
 This step is to make an internal type for the messages that will be
-send to the server. We use the pattern where we make constructor for
-each kind of message and the argument to be send with that kind
-message. If there is an expected reply to given kind of message, we
-use the convention that the last argument for that constructor is a
-channel for sending back the response.
+send to the server.
 
 For the counter server we have a message for each of the interface
 functions and don't have any internal messages:
