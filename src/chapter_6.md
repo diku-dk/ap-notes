@@ -73,10 +73,8 @@ note we use the `Genserver` module to write our servers.
 
 Assume that we have the following import and type alias:
 
-```Haskell
-import qualified Control.Concurrent as CC
-
-type Chan a = CC.Chan a
+```haskell
+{{#include ../haskell/concurrency/genserver/src/Genserver.hs:Setup}}
 ```
 
 
@@ -104,20 +102,15 @@ However, we want a canonical way to communicate with our
 servers. Thus, we introduce the notion of a *server*, we represent a
 server as a pair: a `ThreadId` and an *input channel*:
 
-```Haskell
-type Server message = (CC.ThreadId, Chan message)
+```haskell
+{{#include ../haskell/concurrency/genserver/src/Genserver.hs:Server}}
 ```
 
 Here we use the type variable `message` to denote the type of messages
 that a server can receive, which can be different for each kind of server.
 
-
-```Haskell
-spawn :: (Chan a -> t -> IO ()) -> t -> IO (Server a)
-spawn server initial = do
-  input <- CC.newChan
-  tid <- CC.forkIO $ server input initial
-  return (tid, input)
+```haskell
+{{#include ../haskell/concurrency/genserver/src/Genserver.hs:Spawn}}
 ```
 
 
@@ -134,17 +127,8 @@ available.
 **TODO:** Write some words that explains the code
 ~~~
 
-```Haskell
-send :: Chan a -> a -> IO ()
-send chan msg =
-  CC.writeChan chan msg
-
-sendTo :: Server a -> a -> IO ()
-sendTo (_tid, input) msg =
-  send input msg
-
-receive :: Chan a -> IO a
-receive = CC.readChan
+```haskell
+{{#include ../haskell/concurrency/genserver/src/Genserver.hs:SendReceive}}
 ```
 
 
@@ -173,12 +157,8 @@ is outside the scope of these notes.
 **TODO:** Write some words that explains the code
 ~~~
 
-```Haskell
-requestReply :: Server a -> (Chan b -> a) -> IO b
-requestReply serv con = do
-  reply_chan <- CC.newChan
-  sendTo serv $ con reply_chan
-  receive reply_chan
+```haskell
+{{#include ../haskell/concurrency/genserver/src/Genserver.hs:RequestReply}}
 ```
 
 
