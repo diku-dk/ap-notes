@@ -24,8 +24,8 @@ data Msg = GetValue (GS.Chan Int)
 type CounterServer = GS.Server Msg
 
 newCounter :: Int -> IO CounterServer
-newCounter initial | initial >= 0 = GS.spawn counterLoop initial
-newCounter _ = error "Initial value should be non-negative"
+newCounter initial | initial >= 0 = GS.spawn $ counterLoop initial
+newCounter _                      = error "Initial value should be non-negative"
 
 getValue :: CounterServer -> IO Int
 getValue cnt = GS.requestReply cnt GetValue
@@ -35,28 +35,28 @@ incr cnt = GS.sendTo cnt Incr
 
 decr :: CounterServer -> Int -> IO Bool
 decr cnt n | n >= 0 = GS.requestReply cnt $ Decr n
-decr _ _ = error "Cannot decrement with negative amount"
+decr _ _            = error "Cannot decrement with negative amount"
 -- ANCHOR_END: CounterAPI
 
 -- ANCHOR: CounterLoop
-counterLoop :: GS.Chan Msg -> InternalData -> IO ()
-counterLoop input state = do
+counterLoop :: InternalData -> GS.Chan Msg -> IO ()
+counterLoop state input = do
   msg <- GS.receive input
   case msg of
     GetValue from -> do
       let (newState, res) = (state, state)
       GS.send from res
-      counterLoop input newState
+      counterLoop newState input
     Incr -> do
       let newState = state + 1
-      counterLoop input newState
+      counterLoop newState input
     Decr n from -> do
       let (newState, res) =
             case state of
               value | value > n -> (value - n, True)
               _                 -> (state, False)
       GS.send from res
-      counterLoop input newState
+      counterLoop newState input
 -- ANCHOR_END: CounterLoop
 
 

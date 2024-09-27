@@ -46,10 +46,10 @@ receive = CC.readChan
 -- ANCHOR_END: SendReceive
 
 -- ANCHOR: Spawn
-spawn :: (Chan a -> t -> IO ()) -> t -> IO (Server a)
-spawn server initial = do
+spawn :: (Chan a -> IO ()) -> IO (Server a)
+spawn serverLoop = do
   input <- CC.newChan
-  tid <- CC.forkIO $ server input initial
+  tid <- CC.forkIO $ serverLoop input
   return (tid, input)
 -- ANCHOR_END: Spawn
 
