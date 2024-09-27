@@ -21,17 +21,6 @@ type Chan a = CC.Chan a
 type Server message = (CC.ThreadId, Chan message)
 -- ANCHOR_END: Server
 
-send' :: Chan a -> a -> IO ()
-send' chan msg =
-  CC.writeChan chan $! msg
-
-send'' :: Chan a -> a -> IO ()
-send'' chan msg = do
-  val <- evaluate msg
-  CC.writeChan chan val
-
-
-
 -- ANCHOR: SendReceive
 send :: Chan a -> a -> IO ()
 send chan msg =
