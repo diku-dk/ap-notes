@@ -5,15 +5,15 @@ module Genserver
   , send
   , sendTo
   , spawn
+  , ReplyChan
   , requestReply
+  , reply
   )
 where
 
 -- ANCHOR: Setup
+import Control.Concurrent (Chan)
 import qualified Control.Concurrent as CC
-import Control.Exception (evaluate)
-
-type Chan a = CC.Chan a
 -- ANCHOR_END: Setup
 
 
@@ -44,9 +44,14 @@ spawn serverLoop = do
 
 
 -- ANCHOR: RequestReply
-requestReply :: Server a -> (Chan b -> a) -> IO b
+newtype ReplyChan a = ReplyChan (Chan a)
+
+requestReply :: Server a -> (ReplyChan b -> a) -> IO b
 requestReply serv con = do
   reply_chan <- CC.newChan
-  sendTo serv $ con reply_chan
+  sendTo serv $ con $ ReplyChan reply_chan
   receive reply_chan
+
+reply :: ReplyChan a -> a -> IO ()
+reply (ReplyChan chan) x = send chan x
 -- ANCHOR_END: RequestReply
