@@ -65,16 +65,16 @@ you should be careful not to be tempted by functions that subvert the
 notion of message-passing.
 
 We will not use these primitives directly. Instead we wrap
-these primitive in the module `Genserver`, and in the rest of this
-note we use the `Genserver` module to write our servers.
+these primitive in the module `GenServer`, and in the rest of this
+note we use the `GenServer` module to write our servers.
 
 
-## Implementation of the `Genserver` module
+## Implementation of the `GenServer` module
 
 Assume that we have the following import and type alias:
 
 ```haskell
-{{#include ../haskell/concurrency/genserver/src/Genserver.hs:Setup}}
+{{#include ../haskell/GenServer.hs:Setup}}
 ```
 
 
@@ -103,14 +103,14 @@ servers. Thus, we introduce the notion of a *server*, we represent a
 server as a pair: a `ThreadId` and an *input channel*:
 
 ```haskell
-{{#include ../haskell/concurrency/genserver/src/Genserver.hs:Server}}
+{{#include ../haskell/GenServer.hs:Server}}
 ```
 
 Here we use the type variable `message` to denote the type of messages
 that a server can receive, which can be different for each kind of server.
 
 ```haskell
-{{#include ../haskell/concurrency/genserver/src/Genserver.hs:Spawn}}
+{{#include ../haskell/GenServer.hs:Spawn}}
 ```
 
 
@@ -128,7 +128,7 @@ available.
 ~~~
 
 ```haskell
-{{#include ../haskell/concurrency/genserver/src/Genserver.hs:SendReceive}}
+{{#include ../haskell/GenServer.hs:SendReceive}}
 ```
 
 
@@ -158,7 +158,7 @@ is outside the scope of these notes.
 ~~~
 
 ```haskell
-{{#include ../haskell/concurrency/genserver/src/Genserver.hs:RequestReply}}
+{{#include ../haskell/GenServer.hs:RequestReply}}
 ```
 
 
@@ -293,7 +293,7 @@ For the counter server we have a message for each of the interface
 functions and don't have any internal messages:
 
 ```haskell
-{{#include ../haskell/concurrency/genserver/src-exe/Counter.hs:CounterMsg}}
+{{#include ../haskell/Week6/Counter.hs:CounterMsg}}
 ```
 
 Note how the messages for the blocking functions `getValue` and `decr`
@@ -304,7 +304,7 @@ have a channel as the last argument.
 The server-loop function for a counter server is:
 
 ```Haskell
-{{#include ../haskell/concurrency/genserver/src-exe/Counter.hs:CounterLoop}}
+{{#include ../haskell/Week6/Counter.hs:CounterLoop}}
 ```
 
 
@@ -312,17 +312,17 @@ The server-loop function for a counter server is:
 
 The API functions for a counter server can now be implemented straight
 forward by using the `spawn`, `sendTo` and `requestReply` functions
-from the `Genserver` module:
+from the `GenServer` module:
 
 ```Haskell
-{{#include ../haskell/concurrency/genserver/src-exe/Counter.hs:CounterAPI}}
+{{#include ../haskell/Week6/Counter.hs:CounterAPI}}
 ```
 
 
 ### Example use of a counter server
 
 ```haskell
-{{#include ../haskell/concurrency/genserver/src-exe/Counter.hs:CounterExample}}
+{{#include ../haskell/Week6/Counter.hs:CounterExample}}
 ```
 
 

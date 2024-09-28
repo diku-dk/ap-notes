@@ -18,6 +18,7 @@ library
                   , tasty-hunit
                   , tasty-quickcheck
     exposed-modules:
+        GenServer
         Week1Tests
         Week2.ReaderState
         Week3.Parser

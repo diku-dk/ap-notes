@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs #-}
 module Main where
 
-import qualified Genserver as GS
+import qualified GenServer as GS
 
 
 main :: IO ()

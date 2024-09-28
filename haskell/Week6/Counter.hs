@@ -1,48 +1,72 @@
-module Week6.Counter where
+module Week6.Counter
+  ( CounterServer
+  , newCounter
+  , getValue
+  , incr
+  , decr
 
-import Control.Concurrent
+  , main
+  )
+where
 
-data Msg
-  = Incr (Chan ())
-  | Decr Int (Chan ())
-  | GetValue (Chan Int)
+import qualified GenServer as GS
+import Control.Monad (replicateM_)
 
-type Counter = Chan Msg
+type InternalData = Int
 
-counter :: IO Counter
-counter = do
-  input <- newChan
-  _ <- forkIO $ counterLoop input 0
-  return input
+-- ANCHOR: CounterMsg
+data Msg = GetValue (GS.ReplyChan Int)
+         | Incr
+         | Decr Int (GS.ReplyChan Bool)
+-- ANCHOR_END: CounterMsg
 
-requestReply :: Counter -> (Chan a -> Msg) -> IO a
-requestReply cnt con = do
-  reply_chan <- newChan
-  writeChan cnt $ con reply_chan
-  readChan reply_chan
+-- ANCHOR: CounterAPI
+type CounterServer = GS.Server Msg
 
-incr :: Counter -> IO ()
-incr cnt = requestReply cnt Incr
+newCounter :: Int -> IO CounterServer
+newCounter initial | initial >= 0 = GS.spawn $ counterLoop initial
+newCounter _                      = error "Initial value should be non-negative"
 
-decrWith :: Counter -> Int -> IO ()
-decrWith cnt n = requestReply cnt $ Decr n
+getValue :: CounterServer -> IO Int
+getValue cnt = GS.requestReply cnt GetValue
 
-getValue :: Counter -> IO Int
-getValue cnt = requestReply cnt GetValue
+incr :: CounterServer -> IO ()
+incr cnt = GS.sendTo cnt Incr
 
-counterLoop :: Chan Msg -> Int -> IO b
-counterLoop input state = do
-  msg <- readChan input
+decr :: CounterServer -> Int -> IO Bool
+decr cnt n | n >= 0 = GS.requestReply cnt $ Decr n
+decr _ _            = error "Cannot decrement with negative amount"
+-- ANCHOR_END: CounterAPI
+
+-- ANCHOR: CounterLoop
+counterLoop :: InternalData -> GS.Chan Msg -> IO ()
+counterLoop state input = do
+  msg <- GS.receive input
   case msg of
-    Incr from -> do
-      let (newState, res) = (state + 1, ())
-      writeChan from res
-      counterLoop input newState
-    Decr n from -> do
-      let (newState, res) = (state - n, ())
-      writeChan from res
-      counterLoop input newState
     GetValue from -> do
       let (newState, res) = (state, state)
-      writeChan from res
-      counterLoop input newState
+      GS.reply from res
+      counterLoop newState input
+    Incr -> do
+      let newState = state + 1
+      counterLoop newState input
+    Decr n from -> do
+      let (newState, res) =
+            case state of
+              value | value > n -> (value - n, True)
+              _                 -> (state, False)
+      GS.reply from res
+      counterLoop newState input
+-- ANCHOR_END: CounterLoop
+
+
+main :: IO ()
+-- ANCHOR: CounterExample
+main = do
+  c <- newCounter 0
+  incr c
+  replicateM_ 5 $ incr c
+  _ <- decr c 1
+  v <- getValue c
+  putStrLn $ "The counter should now be 5, and it is " ++ show v
+-- ANCHOR_END: CounterExample

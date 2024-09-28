@@ -1,4 +1,4 @@
-module Genserver
+module GenServer
   ( Chan
   , Server
   , receive
