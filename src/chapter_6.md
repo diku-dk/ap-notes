@@ -321,7 +321,7 @@ dedicated `sendTo` function for sending a message to the server.
 ### Request-Reply Pattern
 
 ~~~admonish warning title='WIP: Text can be improved'
-**TODO:** Write some words that explains the code
+Write some words that explains the code
 ~~~
 
 ```haskell
@@ -494,26 +494,21 @@ from the `GenServer` module:
 
 
 
-## Timeouts
+## Extending `Genserver` with support for timeouts
 
-~~~admonish warning
-**TODO:** This section is work in progress and is not using the right
-terminology, yet.
-~~~
-
-The channel abstraction does not directly support timeouts for RPC
+The server abstraction does not directly support timeouts for blocking
 calls. However, we can build our own support for timeouts. The
-technique we employ is to allow the reply to be either the intended
-value *or* a special timeout value. When we perform an RPC, we then
-also launch a new thread that sleeps for some period of time, then
-write the timeout value to the channel. If the non-timeout response is
-the first to arrive, then the timeout value is ignored and harmless.
+technique we employ is based on three ingredients: 
 
-First we must import the `threadDelay` function.
+1. we have a channel where we allow the reply to be either the
+   intended value *or* a special timeout value.
+2. we start a worker thread to evaluating an action, and send the
+   result back to us.
+3. we launch a extra thread that sleeps for some period of time, then
+   sends the timeout value to us.
 
-```Haskell
-import Control.Concurrent (threadDelay)
-```
+If the non-timeout response is the first to arrive, then the timeout
+value is ignored and harmless.
 
 Then we define a type `Timeout` with a single value `Timeout`.
 
@@ -521,63 +516,34 @@ Then we define a type `Timeout` with a single value `Timeout`.
 data Timeout = Timeout
 ```
 
-Then we define a message type (in this case polymorphic in `a`) where
-the reply channel accepts messages of type `Either Timeout a`.
 
-```Haskell
-data Msg a = MsgDoIt (Chan (Either Timeout a)) (IO a)
-```
-
-A `Msg a` denotes a request to perform some impure operation `IO a`
-(perhaps a network request), then reply with the resulting value of
-type `a`.
-
-We can use this to build a facility for performing an action with a
+We can use this to build a function for performing an action with a
 timeout:
 
 ```Haskell
 actionWithTimeout :: Int -> IO a -> IO (Either Timeout a)
-actionWithTimeout seconds action = do
-  reply_chan <- newChan
-  _ <- forkIO $ do -- worker thread
-    x <- action
-    writeChan reply_chan $ Right x
-  _ <- forkIO $ do -- timeout thread
-    threadDelay (seconds * 1000000)
-    writeChan reply_chan $ Left Timeout
-  readChan reply_chan
 ```
 
-You will note that this is not a server in the usual sense, as it does
-not loop: it simply launches two threads.
+That is, `actionWithTimeout s act` will perform the action `act`
+within a time limit of `s` seconds; it returns an action of type
+`IO(Either Timeout a)` where the special value `Timeout` is returned
+if `act` did not complete within the time limit:
+
+```Haskell
+{{#include ../haskell/concurrency/genserver/src/Genserver.hs:ActionWithTimeout}}
+```
+
+You will note that this is not a server in the `Genserver` sense, as it does
+not loop: it is simply a utility function that launches two threads.
 
 One downside of this function is that the worker thread (the one that
 runs `action`, and might take too long) is not terminated after the
-timeout. This is a problem if it is, for example, stuck in an infinite
+timeout. This is a problem if `action` is, for example, stuck in an infinite
 loop that consumes ever more memory. To fix this, we can have the
-timeout thread explicitly kill the worker thread. First we have to
-import the `killThread` function.
+timeout thread explicitly kill the worker thread:
 
 ```Haskell
-import Control.Concurrent (killThread)
-```
-
-Then we can use it as follows.
-
-```Haskell
-actionWithTimeout2 :: Int -> IO a -> IO (Either Timeout a)
-actionWithTimeout2 seconds action = do
-  reply_chan <- newChan
-  worker_tid <- forkIO $ do
-    -- worker thread
-    x <- action
-    writeChan reply_chan $ Right x
-  _ <- forkIO $ do
-    -- timeout thread
-    threadDelay (seconds * 1000000)
-    killThread worker_tid
-    writeChan reply_chan $ Left Timeout
-  readChan reply_chan
+{{#include ../haskell/concurrency/genserver/src/Genserver.hs:ActionWithTimeoutKill}}
 ```
 
 Note that killing a thread is a dangerous operation in general. It may
