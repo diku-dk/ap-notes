@@ -8,9 +8,8 @@ languages. We use:
 
  * Lightweight independent **threads** of control.
 
-   Lightweight means that it is not a big concern to keep the number
-   of threads low (up to a couple of hundred thousand is usually
-   fine).
+   Lightweight means we can create many threads without worrying about
+   overhead (up to a couple of hundred thousand is usually fine).
 
  * **Channels** for communicating between threads.
 
@@ -29,7 +28,7 @@ approach is perfectly suitable for distributed systems, as seen in for
 example [Cloud Haskell](http://haskell-distributed.github.io/), or
 languages such as Erlang and Elixir.
 
-Concurrency is closely related (but not the same as) *parallelism*.
+Concurrency is closely related to (but not the same as) *parallelism*.
 While multi-threading in Haskell is indeed one way to take advantage
 of parallel multi-core computers, this is not an explicit aspect of
 our study of concurrency. Instead, we focus on concurrency as a
@@ -37,7 +36,9 @@ programming model which happens to be convenient for expressing
 certain forms of event-driven systems.
 
 Concurrent programming in Haskell is done in the `IO` monad because
-threads (can) have effects. Effects from multiple threads are
+threads are executed for their effects. Threads do not have a "return
+value" as such, so the only way they can influence a computation is
+through their side effects. Effects from multiple threads are
 interleaved *nondeterministically* at runtime.
 
 Concurrent programming allows programs that interact with multiple
@@ -51,7 +52,7 @@ This chapter is about a principled and systematic way of constructing
 concurrent programs as a collection of interacting servers.
 
 
-## Basics Primitives
+## Concurrency Primitives
 
 We use the Haskell modules
 [Control.Concurrent](https://hackage.haskell.org/package/base-4.20.0.1/docs/Control-Concurrent.html)
@@ -62,14 +63,219 @@ use only a fairly small subset of the facilities provided by the
 Haskell standard library. You are welcome (and encouraged) to peruse
 the documentation to enlighten yourself, but in this particular case
 you should be careful not to be tempted by functions that subvert the
-notion of message-passing.
+notion of message-passing. In this section we will use the following
+facilities from `Control.Concurrent`:
 
-We will not use these primitives directly. Instead we wrap
-these primitive in the module `GenServer`, and in the rest of this
-note we use the `GenServer` module to write our servers.
+```Haskell
+import Control.Concurrent
+  ( Chan,
+    ThreadId,
+    forkIO,
+    newChan,
+    readChan,
+    writeChan,
+  )
+```
 
+To create a new thread in Haskell, we use the `forkIO` function. The
+`forkIO` function has the following type:
+
+```Haskell
+forkIO :: IO () -> IO ThreadId
+```
+
+In other words, to create a thread we pass `forkIO` an action of type
+`IO ()`, meaning a monadic computation in the `IO` monad. Typically,
+this will be some kind of potentially infinite loop that receives and
+handles messages, as we will see in a moment. The thread will continue
+to run until this action terminates.
+
+The `forkIO` function returns a `ThreadId` that can be used for
+interacting with the thread in low level ways, although we will not
+make much use of that in AP. Instead, we will communicate using
+channel-based messaging.
+
+~~~admonish example
+
+```Haskell
+runThread :: IO ()
+runThread = do
+  t <- forkIO $ putStrLn "Hello there."
+  print t
+```
+
+```
+> runThread
+HellToh rtehaedrIed.
+47
+```
+
+Note how the output of the new thread and the original computation is interleaved.
+
+~~~
+
+
+### Channels and Messages
+
+In Haskell, communication is done via *channels*. A channel is created
+using the `newChan` action:
+
+```Haskell
+newChan :: IO (Chan a)
+```
+
+The `newChan` action produces a channel that can be used for sending
+and receiving messages of type `a`. The precise type of `a` will be
+inferred by the compiler.
+
+Messages can be both read and written to a channel, corresponding to
+receiving and sending messages, using the following two functions:
+
+```Haskell
+writeChan :: Chan a -> a -> IO ()
+readChan :: Chan a -> IO a
+```
+
+Conceptually, a channel is an unbounded queue of messages. Writing to
+a channel is an asynchronous operation - it immediately and always
+succeeds. Reading from a channel retrieves the oldest message in the
+channel. If the channel is empty, reading blocks until a message is
+available.
+
+~~~admonish example
+
+```Haskell
+channelExample :: IO ()
+channelExample = do
+  c <- newChan
+  _ <- forkIO $ do
+    r <- readChan c
+    putStrLn $ "Received message: " <> r
+  writeChan c "Hello there."
+```
+
+```
+> channelExample
+Receive message: Hello there.
+```
+
+~~~
+
+Whenever we create a thread, we will also create a channel through
+which we can communicate with the thread. Typically the thread will
+run a loop that repeatedly reads from the channel and responds to
+message.
+
+~~~admonish example
+
+```Haskell
+channelLoopExample :: IO ()
+channelLoopExample = do
+  c <- newChan
+  let threadLoop = do
+        r <- readChan c
+        putStrLn $ "Received message: " <> r
+        threadLoop
+  _ <- forkIO threadLoop
+  writeChan c "The first"
+  writeChan c "The second"
+  writeChan c "The third"
+```
+
+```
+> channelLoopExample
+Received message: The first
+Received message: The second
+Received message: The third
+```
+
+~~~
+
+When two different threads have a reference to the same channel (`c`
+in the example above), they can communicate. However, completely
+arbitrary use of a shared channel will quickly lead to chaos, so we
+step in to restore order.
+
+**Single-reader principle:** we adopt the rule that a channel may have
+only a *single* reader, meaning only a single thread is allowed to
+call `readChan` on any given channel. This is typically the thread
+that we created the channel for. This is not enforced by the Haskell
+type system, and there are indeed forms of concurrent programming
+that are more flexible, but they are outside the scope of AP.
+
+It is perfectly acceptable (and often necessary) for a channel to have
+multiple writers.
+
+If we call `readChan` on a channel where we hold the only reference
+(meaning we would in principle wait forever), the Haskell runtime
+system will raise an exception that will cause the thread to be
+terminated. This is a natural and safe way to shut down a thread that
+is no longer necessary, assuming the thread does not hold resources
+(e.g., open files) that must be manually closed. Handling such cases is
+outside the scope of this note.
+
+### Remote procedure calls (RPC)
+
+The Haskell message passing facility is asynchronous, but quite often
+we wish to send a message to a server and then wait for it to respond
+with some kind of result, corresponding to a procedure call. To
+implement synchronous *remote procedure calls* (RPC), we need to
+invent a bit of machinery on top of the basic message passing
+machinery. The way we make it work is by creating a new channel that
+is used for transmitting the result. This channel is then sent along
+as part of the message.
+
+The starting point (and always good practice) is to define an explicit
+type for the messages we would like to send.
+
+```Haskell
+data Msg = MsgInc Int (Chan Int)
+```
+
+We then define our thread loop as follows:
+
+```Haskell
+threadLoop :: Chan Msg -> IO ()
+threadLoop c = do
+  msg <- readChan c
+  case msg of
+    MsgInc x from ->
+      writeChan (x + 1) from
+  threadLoop c
+```
+
+Given a handle to a channel of type `Chan Msg`, we can then send a
+message, and wait for a response, as follows:
+
+```Haskell
+performRPC :: Chan Msg -> Int -> IO Int
+performRPC c x = do
+  from <- newChan
+  writeChan c $ MsgInc x from
+  readChan from
+```
+
+And tying it all together:
+
+```Haskell
+ex2 :: IO ()
+ex2 = do
+  c <- newChan
+  _ <- forkIO $ threadLoop c
+  print =<< performRPC c 0
+  print =<< performRPC c 1
+
+```
 
 ## Implementation of the `GenServer` module
+
+Using the concurrency primitives directly is somewhat error-prone,
+particularly for the constrained form of concurrency we study in AP.
+Therefore, we wrap these primitive in a module `GenServer` that
+defines a canonical way of using the techniques discussed above, and
+in the rest of this note we use the `GenServer` module to write our
+servers. There may still be cases where we have to break out of the
+`GenServer` abstraction, but we will largely try to work within it.
 
 Assume that we have the following import and type alias:
 
@@ -77,30 +283,12 @@ Assume that we have the following import and type alias:
 {{#include ../haskell/GenServer.hs:Setup}}
 ```
 
-
 ### Servers
 
-The basic requirement of concurrency is to be able to fork a new
-thread of control. In Haskell we do this with the `forkIO` operation:
-
-```Haskell
-forkIO :: IO () -> IO ThreadId
-```
-
-The function `forkIO` takes a computation of type `IO ()` as its
-argument; that is, a computation in the `IO` monad that eventually
-returns a value of type `()`. The computation passed to `forkIO` is
-executed in a new *thread* that runs concurrently with the other
-threads in the system.
-
-The `ThreadId` that is returned is an opaque handle to the thread. We
-can use it to perform a few low-level operations, such as killing the
-thread or waiting for it to finish, but this will not be the main way
-we interact with threads.
-
-However, we want a canonical way to communicate with our
-servers. Thus, we introduce the notion of a *server*, we represent a
-server as a pair: a `ThreadId` and an *input channel*:
+The `forkIO` procedure provides a low-level way to create a new
+thread. However, we want a canonical way to communicate with our
+servers. Thus, we introduce the `Server` type. We represent a server
+as a pair: a `ThreadId` and an *input channel*:
 
 ```haskell
 {{#include ../haskell/GenServer.hs:Server}}
@@ -116,11 +304,10 @@ that a server can receive, which can be different for each kind of server.
 
 ### Channels
 
-Conceptually, a channel is an unbounded queue of messages. Writing to
-a channel is an asynchronous operation - it immediately and always
-succeeds. Reading from a channel retrieves the oldest message in the
-channel. If the channel is empty, reading blocks until a message is
-available.
+Channels are largely unchanged from their primitive form, except that
+we define some more concise functions. Further, to users of a server
+the channel is hidden away in the `Server` type, and so we provide a
+dedicated `sendTo` function for sending a message to the server.
 
 
 ~~~admonish warning title='WIP: Text can be improved'
@@ -130,26 +317,6 @@ available.
 ```haskell
 {{#include ../haskell/GenServer.hs:SendReceive}}
 ```
-
-
-**Single-reader principle:** we adopt the rule that a channel may have
-only a *single* reader, meaning only a single thread is allowed to
-call `readChan` on any given channel. This is typically the thread
-that we created the channel for. This is not enforced by the Haskell
-type system, and there are indeed forms of concurrent programming
-that are more flexible, but they are outside the scope of this note.
-
-It is perfectly acceptable (and often necessary) for a channel to have
-multiple writers.
-
-If we call `readChan` on a channel where we hold the only reference
-(meaning we would in principle wait forever), the Haskell runtime
-system will raise an exception that will cause the thread to be
-terminated. This is a natural and safe way to shut down a thread that
-is no longer necessary, assuming the thread does not hold resources
-(e.g., open files) that must be manually closed. Handling such cases
-is outside the scope of these notes.
-
 
 ### Request-Reply Pattern
 
