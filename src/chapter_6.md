@@ -531,7 +531,7 @@ within a time limit of `s` seconds; it returns an action of type
 if `act` did not complete within the time limit:
 
 ```Haskell
-{{#include ../haskell/concurrency/genserver/src/Genserver.hs:ActionWithTimeout}}
+{{#include ../haskell/GenServer.hs:ActionWithTimeout}}
 ```
 
 You will note that this is not a server in the `Genserver` sense, as it does
@@ -544,7 +544,7 @@ loop that consumes ever more memory. To fix this, we can have the
 timeout thread explicitly kill the worker thread:
 
 ```Haskell
-{{#include ../haskell/concurrency/genserver/src/Genserver.hs:ActionWithTimeoutKill}}
+{{#include ../haskell/GenServer.hs:ActionWithTimeoutKill}}
 ```
 
 Note that killing a thread is a dangerous operation in general. It may
