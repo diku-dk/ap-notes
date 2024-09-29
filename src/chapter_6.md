@@ -388,9 +388,11 @@ steps.
    we use `requestReply` for each blocking function and `sendTo` for
    each non-blocking function.
 
-It is best practise to declare each server in a separate module. Thus
-when we talk about *internal* types and functions, it is types and
-functions not exported from the module.
+It is usually best practise to declare each server in a separate
+module. Thus when we talk about *internal* types and functions, it is
+types and functions not exported from the module. However, there are
+cases where a server may define its own internal servers for utility
+purposes, that would be awkward to define in a separate module.
 
 
 
