@@ -553,3 +553,368 @@ for a network request, in which case it is harmless, but killing it
 may also leave some shared state in an unspecified state. We will
 (hopefully) not encounter such cases in AP, but it is something to be
 aware of in the future.
+
+## A Larger Example: A Module for Asynchronous Computation
+
+In this section we will look at the design of a GenServer-based module
+for executing pure Haskell functions in an asynchronous manner. It
+demonstrates several important programming techniques, including the
+use of sub-threads to ensure reponsivity and robustness. We are
+concerned here only with pure functions. The API of the system we will
+implement is as follows:
+
+```Haskell
+data Async a
+
+type Seconds = Int
+
+async :: Seconds -> (a -> b) -> a -> IO (Async b)
+
+data Result a
+  = Timeout
+  | Exception String
+  | Value a
+  deriving (Eq, Ord, Show)
+
+poll :: Async a -> IO (Maybe (Result a))
+
+wait :: Async a -> IO (Result a)
+
+```
+
+A value of type `Async a` represents an asynchronous computation that
+produce a value of type `a`. They are created using the function
+`async`, which takes as argument a maximum allowed runtime, a function
+`a -> b`, and an argument value `a`, returning an `Async b`. The
+`async` function itself must return immediately.
+
+The status of an `Async a` value can be inspected using the functions
+`poll` and `wait`. The `poll` function immediately returns the state
+of the asynchronous computation, returning `Nothing` if the
+computation is still ongoing, and otherwise a result of type `Result
+a`:
+
+* `Timeout` is returned if the execution of the function exceeded the
+  runtime specified by the original `async` invocation.
+
+* `Exception`, along with the exception error message, is returned if
+  the computation resulted in an exception being thrown.
+
+* `Value` is returned if the computation finished without exceptions
+  and within the allotted runtime.
+
+The `wait` function is similar to `poll`, except that it *blocks*
+until the computation finishes.
+
+We will use the following definition of `fib` in our examples:
+
+```Haskell
+fib :: Int -> Int
+fib 0 = 1
+fib 1 = 1
+fib n =
+  if n < 0
+    then error "negative n"
+    else fib (n - 1) + fib (n - 2)
+```
+
+Because it returns `Int`, it is easy to use the `evaluate` function
+from `Control.Exception` to ensure that the result is fully evaluated.
+
+~~~admonish example
+
+```
+simpleDemo :: IO ()
+simpleDemo = do
+  putStrLn "a"
+  a <- async 1 fib 10
+  print =<< poll a
+  print =<< wait a
+```
+
+~~~
+
+### Initial Design
+
+Our server thread can be seen as a state machine with two main states:
+
+1. Before we know the result of the computation. At this point we must
+   also maintain a list of those clients that have called `wait` and
+   must be informed when the computation finishes.
+
+2. After the result of the computation is known, which requires
+   storing the result.
+
+Further, when we transition from stage 1 to 2, we must inform all of
+the waiting clients of the result.
+
+For simplicity, we will initially not worry about timeouts and
+exceptions. It will turn out to be quite simple to add support for
+these features.
+
+Our design will be to launch a separate *worker thread* that computes
+the value. This allows the main server thread to immediately answer
+`poll` requests even through the worker thread is engaged in a
+long-running computation. Once the worker thread has computed the
+desired value, it will be sent to the server thread in a message.
+Further, we need messages for the `poll` and `wait` functions. Our
+resulting message type is the following:
+
+```Haskell
+data Msg a
+  = MsgPutVal a
+  | MsgPoll (ReplyChan (Maybe (Result a)))
+  | MsgWait (ReplyChan (Result a))
+```
+
+And the `poll` and `wait` functions are merely wrappers around sending
+the corresponding messages:
+
+```Haskell
+poll :: Async a -> IO (Maybe (Result a))
+poll (Async s) =
+  requestReply s MsgPoll
+
+wait :: Async a -> IO (Result a)
+wait (Async s) =
+  requestReply s MsgWait
+```
+
+To represent the two main states of the server, we use two recursive
+functions:
+
+```Haskell
+noValueLoop :: Chan (Msg a) -> [ReplyChan (Result a)] -> IO ()
+noValueLoop c waiters = do
+  msg <- receive c
+  case msg of
+    MsgPutVal v' -> do
+      forM_ waiters $ \from ->
+        reply from $ Value v'
+      valueLoop c (Value v')
+    MsgPoll from -> do
+      reply from Nothing
+      noValueLoop c waiters
+    MsgWait from ->
+      noValueLoop c (from : waiters)
+
+valueLoop :: Chan (Msg a) -> Result a -> IO ()
+valueLoop c v = do
+  msg <- receive c
+  case msg of
+    MsgPutVal _ ->
+      valueLoop c v
+    MsgPoll from -> do
+      reply from $ Just v
+      valueLoop c v
+    MsgWait from -> do
+      reply from v
+      valueLoop c v
+```
+
+Note how the `MsgWait` case in `noValueLoop` simply adds the
+`ReplyChan` to a list. Then, once we receive a `MsgPutVal`, we reply
+to all of these pending calls. In contrast, when we receive a
+`MsgWait` in `valueLoop`, we immediately respond with the result. If
+we are in `valueLoop` and receive another `MsgPutVal` message, we
+simply ignore it. In practice this will never occur (at least not
+until we add timeouts and exceptions).
+
+Instead of using two function to represent two states, we could also
+have used a single function and stored the server state as a sum type
+with two constructors. I prefer using mutually recursive functions to
+represent the high level states of a server (if such a distinction
+makes sense), but this is ultimately a matter of personal taste.
+
+An `Async a` is now just a type that wraps a `Server (Msg a)`:
+
+```Haskell
+data Async a = Async (Server (Msg a))
+```
+
+The `async` function uses `spawn` to create a server. Before entering
+the server loop, we use `forkIO` to create the worker thread, which
+has a reference to a channel (`c`) from which the server reads
+messages:
+
+```Haskell
+async :: Seconds -> (a -> b) -> a -> IO (Async b)
+async timeout f x = do
+  s <- spawn $ \c -> do
+    void $ forkIO $ do
+      x' <- evaluate $ f x
+      send c $ MsgPutVal x'
+    noValueLoop c []
+  pure $ Async s
+```
+
+Initially the `noValueLoop` has no waiters.
+
+This completes the basic functionality of the `Async` server.
+
+### Handling Timeouts
+
+Timeouts are (almost) always handled by creating a thread that waits
+for some period of time, then sends a message or takes some other
+action. Here, we will add a new message that indicates that the
+timeout has passed:
+
+```Haskell
+data Msg a
+  = ...
+  | MsgTimeout
+
+```
+
+We modify `async` such that after creating the worker thread, we also
+create a thread that sends this message after the timeout has passed.
+Note that `threadDelay` accepts an argument in microseconds, so we
+have to multiply the provided timeout by one million.
+
+```Haskell
+async :: Seconds -> (a -> b) -> a -> IO (Async b)
+async timeout f x = do
+  s <- spawn $ \c -> do
+    void $ forkIO $ do
+      x' <- evaluate $ f x
+      send c $ MsgPutVal x'
+    void $ forkIO $ do
+      threadDelay $ timeout * 1000000
+      send c MsgTimeout
+    noValueLoop c []
+  pure $ Async s
+```
+
+Finally, we modify `noValueLoop` and `valueLoop` to handle the new
+`MsgTimeout`. In the former, reception of such a message denotes a
+timeout, and so we switch to the `valueLoop` state, with `Timeout` as
+our value:
+
+```Haskell
+noValueLoop :: Chan (Msg a) -> [ReplyChan (Result a)] -> IO ()
+noValueLoop c waiters = do
+  msg <- receive c
+  case msg of
+    ...
+    MsgTimeout -> do
+      forM_ waiters $ \from ->
+        reply from Timeout
+      valueLoop c Timeout
+```
+
+In `valueLoop`, `MsgTimeout` is simply ignored, as all it indicates is
+that the original timeout has expired - which is unimportant once the
+value has been received.
+
+```Haskell
+valueLoop :: Chan (Msg a) -> Result a -> IO ()
+valueLoop c v = do
+  msg <- receive c
+  case msg of
+    ...
+    MsgTimeout ->
+      valueLoop c v
+
+```
+
+~~~admonish example
+
+```Haskell
+timeoutDemo :: IO ()
+timeoutDemo = do
+  a <- async 1 fib 100
+  print =<< poll a
+  print =<< wait a
+```
+
+```
+> timeoutDemo
+Nothing
+Timeout
+```
+
+~~~
+
+Arguably, if the timeout is reached, we should use `killThread` to
+liquidate the worker thread, in case it is stuck in an infinite loop.
+This would require us to augment the state with a reference to the
+`ThreadId` of the worker thread.
+
+### Handling Exceptions
+
+At the protocol level, the handling of exceptions is very similar to
+the handling of values. We add a new message type:
+
+```Haskell
+data Msg a
+  = ...
+  | MsgPutException String
+
+```
+
+The handling of `MsgPutException` is then essentially identical to the
+handling of `MsgPutVal`:
+
+```Haskell
+noValueLoop :: Chan (Msg a) -> [ReplyChan (Result a)] -> IO ()
+noValueLoop c waiters = do
+  msg <- receive c
+  case msg of
+    ...
+    MsgPutException err -> do
+      forM_ waiters $ \from ->
+        reply from $ Exception err
+      valueLoop c (Exception err)
+
+```
+
+```Haskell
+valueLoop :: Chan (Msg a) -> Result a -> IO ()
+valueLoop c v = do
+  msg <- receive c
+  case msg of
+    ...
+    MsgPutException _ ->
+      valueLoop c v
+```
+
+Exceptions are caught in the worker thread, using the technique
+discussed in Chapter 4 of these notes:
+
+```Haskell
+async :: Seconds -> (a -> b) -> a -> IO (Async b)
+async timeout f x = do
+  s <- spawn $ \c -> do
+    void $ forkIO $ do
+      let computeValue = do
+            x' <- evaluate $ f x
+            send c $ MsgPutVal x'
+          onException :: SomeException -> IO ()
+          onException e = do
+            send c $ MsgPutException $ show e
+      catch computeValue onException
+    void $ forkIO $ do
+      threadDelay $ timeout * 1000000
+      send c MsgTimeout
+    noValueLoop c []
+  pure $ Async s
+
+```
+
+~~~admonish example
+
+```Haskell
+exceptionDemo :: IO ()
+exceptionDemo = do
+  a <- async 1 fib (-1)
+  print =<< poll a
+  print =<< wait a
+```
+
+```
+> exceptionDemo
+Nothing
+Exception "negative n"
+```
+
+~~~
