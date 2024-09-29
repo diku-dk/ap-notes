@@ -372,8 +372,7 @@ steps.
 4. Implement a *server-loop* function.
 
    We use the convention that a server-loop function should take the
-   input channel for the server as the first argument and the initial
-   value for the internal data as the second argument. This convention
+   input channel for the server as the first argument. This convention
    makes it convenient to use the `spawn` function.
 
    The server loop will usually start by receiving a message on the
