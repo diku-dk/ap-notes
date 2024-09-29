@@ -1,20 +1,29 @@
-module Genserver
-  ( Chan
-  , Server
-  , receive
-  , send
-  , sendTo
-  , spawn
-  , ReplyChan
-  , requestReply
-  , reply
-  , actionWithTimeout
-  , actionWithTimeoutKill
+module GenServer
+  ( Chan,
+    Server,
+    receive,
+    send,
+    sendTo,
+    spawn,
+    ReplyChan,
+    requestReply,
+    reply,
+    actionWithTimeout,
+    actionWithTimeoutKill,
   )
 where
 
 -- ANCHOR: Setup
-import Control.Concurrent (Chan, ThreadId, forkIO, newChan, readChan, writeChan)
+import Control.Concurrent
+  ( Chan,
+    ThreadId,
+    forkIO,
+    killThread,
+    newChan,
+    readChan,
+    threadDelay,
+    writeChan,
+  )
 -- ANCHOR_END: Setup
 
 -- ANCHOR: Server
@@ -47,7 +56,7 @@ newtype ReplyChan a = ReplyChan (Chan a)
 
 requestReply :: Server a -> (ReplyChan b -> a) -> IO b
 requestReply serv con = do
-  reply_chan <- ReplyChan <$> CC.newChan
+  reply_chan <- ReplyChan <$> newChan
   sendTo serv $ con reply_chan
   receiveReply reply_chan
 
@@ -63,12 +72,14 @@ data Timeout = Timeout
 -- ANCHOR: ActionWithTimeout
 actionWithTimeout :: Int -> IO a -> IO (Either Timeout a)
 actionWithTimeout seconds action = do
-  chan <- ReplyChan <$> CC.newChan
-  _ <- CC.forkIO $ do -- worker thread
+  chan <- ReplyChan <$> newChan
+  _ <- forkIO $ do
+    -- worker thread
     x <- action
     reply chan $ Right x
-  _ <- CC.forkIO $ do -- timeout thread
-    CC.threadDelay (seconds * 1000000)
+  _ <- forkIO $ do
+    -- timeout thread
+    threadDelay (seconds * 1000000)
     reply chan $ Left Timeout
   receiveReply chan
 -- ANCHOR_END: ActionWithTimeout
@@ -76,13 +87,15 @@ actionWithTimeout seconds action = do
 -- ANCHOR: ActionWithTimeoutKill
 actionWithTimeoutKill :: Int -> IO a -> IO (Either Timeout a)
 actionWithTimeoutKill seconds action = do
-  chan <- ReplyChan <$> CC.newChan
-  worker_tid <- CC.forkIO $ do -- worker thread
+  chan <- ReplyChan <$> newChan
+  worker_tid <- forkIO $ do
+    -- worker thread
     x <- action
     reply chan $ Right x
-  _ <- CC.forkIO $ do -- timeout thread
-    CC.threadDelay (seconds * 1000000)
-    CC.killThread worker_tid
+  _ <- forkIO $ do
+    -- timeout thread
+    threadDelay (seconds * 1000000)
+    killThread worker_tid
     reply chan $ Left Timeout
   receiveReply chan
 -- ANCHOR_END: ActionWithTimeoutKill
