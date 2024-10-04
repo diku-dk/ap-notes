@@ -277,7 +277,7 @@ in the rest of this note we use the `GenServer` module to write our
 servers. There may still be cases where we have to break out of the
 `GenServer` abstraction, but we will largely try to work within it.
 
-Assume that we have the following import and type alias:
+We will make use of the following imports:
 
 ```haskell
 {{#include ../haskell/GenServer.hs:Setup}}
@@ -287,42 +287,47 @@ Assume that we have the following import and type alias:
 
 The `forkIO` procedure provides a low-level way to create a new
 thread. However, we want a canonical way to communicate with our
-servers. Thus, we introduce the `Server` type. We represent a server
-as a pair: a `ThreadId` and an *input channel*:
+servers. Thus, we introduce the `Server` abstract type. We represent a
+server as a pair: a `ThreadId` and an *input channel*:
 
 ```haskell
 {{#include ../haskell/GenServer.hs:Server}}
 ```
 
 Here we use the type variable `message` to denote the type of messages
-that a server can receive, which can be different for each kind of server.
+that a server can receive, which can be different for each kind of
+server.
 
 ```haskell
 {{#include ../haskell/GenServer.hs:Spawn}}
 ```
 
+Note that `Server` will be an abstract type - users cannot directly
+access its components, except through the interface we define below.
 
 ### Channels
 
-Channels are largely unchanged from their primitive form, except that
-we define some more concise functions. Further, to users of a server
-the channel is hidden away in the `Server` type, and so we provide a
-dedicated `sendTo` function for sending a message to the server.
-
-
-~~~admonish warning title='WIP: Text can be improved'
-**TODO:** Write some words that explains the code
-~~~
+In the `GenServer` abstraction, channels are unchanged from their
+primitive form, except that we define some more concise function
+names.
 
 ```haskell
 {{#include ../haskell/GenServer.hs:SendReceive}}
 ```
 
+However, to users of a server the channel is hidden away in the
+`Server` type, and so we provide a dedicated `sendTo` function for
+sending a message to the server.
+
+```haskell
+{{#include ../haskell/GenServer.hs:SendTo}}
+```
+
 ### Request-Reply Pattern
 
-~~~admonish warning title='WIP: Text can be improved'
-Write some words that explains the code
-~~~
+We saw above how to implement RPC on top of asynchronous messages. To
+cut down on the boilerplate and avoid incorrect usage, we provide a
+convenience API in the `GenServer` API for performing RPCs.
 
 ```haskell
 {{#include ../haskell/GenServer.hs:RequestReply}}

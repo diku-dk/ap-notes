@@ -27,28 +27,29 @@ import Control.Concurrent
 -- ANCHOR_END: Setup
 
 -- ANCHOR: Server
-type Server msg = (ThreadId, Chan msg)
+data Server msg = Server ThreadId (Chan msg)
 -- ANCHOR_END: Server
 
 -- ANCHOR: SendReceive
 send :: Chan a -> a -> IO ()
-send chan msg =
-  writeChan chan msg
-
-sendTo :: Server a -> a -> IO ()
-sendTo (_tid, input) msg =
-  send input msg
+send chan msg = writeChan chan msg
 
 receive :: Chan a -> IO a
 receive = readChan
 -- ANCHOR_END: SendReceive
+
+-- ANCHOR: SendTo
+sendTo :: Server a -> a -> IO ()
+sendTo (Server _tid input) msg =
+  send input msg
+-- ANCHOR_END: SendTo
 
 -- ANCHOR: Spawn
 spawn :: (Chan a -> IO ()) -> IO (Server a)
 spawn serverLoop = do
   input <- newChan
   tid <- forkIO $ serverLoop input
-  return (tid, input)
+  return $ Server tid input
 -- ANCHOR_END: Spawn
 
 -- ANCHOR: RequestReply
