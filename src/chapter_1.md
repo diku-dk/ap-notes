@@ -209,11 +209,11 @@ When run, this will produce output such as the following:
 unit test suite
   should work:       OK
   should not work:   FAIL
-    .../Week1Tests.hs:10:
+    .../Week1/Tests.hs:10:
     1 is not 2
     Use -p '/should not work/' to rerun this test only.
   should not work 2: FAIL
-    .../Week1Tests.hs:13:
+    .../Week1/Tests.hs:13:
     expected: 2
      but got: 1
     Use -p '$0=="unit test suite.should not work 2"' to rerun this test only.

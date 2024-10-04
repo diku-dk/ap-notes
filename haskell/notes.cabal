@@ -19,7 +19,9 @@ library
                   , tasty-quickcheck
     exposed-modules:
         GenServer
-        Week1Tests
+        Week1.Classes
+        Week1.Phantom
+        Week1.Tests
         Week2.ReaderState
         Week3.Parser
         Week3.Megaparsec

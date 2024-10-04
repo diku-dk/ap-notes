@@ -1,4 +1,4 @@
-module Week1Classes where
+module Week1.Classes where
 
 import Prelude hiding (elem)
 

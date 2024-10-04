@@ -1,4 +1,4 @@
-module Week1Phantom where
+module Week1.Phantom where
 
 data Joule
 

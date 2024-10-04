@@ -1,4 +1,4 @@
-module Week1Tests where
+module Week1.Tests where
 
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
