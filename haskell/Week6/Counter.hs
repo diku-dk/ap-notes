@@ -9,43 +9,43 @@ module Week6.Counter
   )
 where
 
-import qualified GenServer as GS
+import GenServer
 import Control.Monad (replicateM_)
 
 type InternalData = Int
 
 -- ANCHOR: CounterMsg
-data Msg = GetValue (GS.ReplyChan Int)
+data Msg = GetValue (ReplyChan Int)
          | Incr
-         | Decr Int (GS.ReplyChan Bool)
+         | Decr Int (ReplyChan Bool)
 -- ANCHOR_END: CounterMsg
 
 -- ANCHOR: CounterAPI
-type CounterServer = GS.Server Msg
+type CounterServer = Server Msg
 
 newCounter :: Int -> IO CounterServer
-newCounter initial | initial >= 0 = GS.spawn $ counterLoop initial
+newCounter initial | initial >= 0 = spawn $ counterLoop initial
 newCounter _                      = error "Initial value should be non-negative"
 
 getValue :: CounterServer -> IO Int
-getValue cnt = GS.requestReply cnt GetValue
+getValue cnt = requestReply cnt GetValue
 
 incr :: CounterServer -> IO ()
-incr cnt = GS.sendTo cnt Incr
+incr cnt = sendTo cnt Incr
 
 decr :: CounterServer -> Int -> IO Bool
-decr cnt n | n >= 0 = GS.requestReply cnt $ Decr n
+decr cnt n | n >= 0 = requestReply cnt $ Decr n
 decr _ _            = error "Cannot decrement with negative amount"
 -- ANCHOR_END: CounterAPI
 
 -- ANCHOR: CounterLoop
-counterLoop :: InternalData -> GS.Chan Msg -> IO ()
+counterLoop :: InternalData -> Chan Msg -> IO ()
 counterLoop state input = do
-  msg <- GS.receive input
+  msg <- receive input
   case msg of
     GetValue from -> do
       let (newState, res) = (state, state)
-      GS.reply from res
+      reply from res
       counterLoop newState input
     Incr -> do
       let newState = state + 1
@@ -55,7 +55,7 @@ counterLoop state input = do
             case state of
               value | value > n -> (value - n, True)
               _                 -> (state, False)
-      GS.reply from res
+      reply from res
       counterLoop newState input
 -- ANCHOR_END: CounterLoop
 

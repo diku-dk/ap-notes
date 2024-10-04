@@ -326,13 +326,38 @@ sending a message to the server.
 ### Request-Reply Pattern
 
 We saw above how to implement RPC on top of asynchronous messages. To
-cut down on the boilerplate and avoid incorrect usage, we provide a
-convenience API in the `GenServer` API for performing RPCs.
+cut down on the boilerplate and avoid incorrect usage, `GenServer`
+provides a structured facility for performing RPCs.
+
+First, we define an abstract type that encapsulates a the *reply
+channel*. Under the hood, this is just a normal channel, but the
+wrapper type denotes that its purpose is to reply to an RPC.
+
+```Haskell
+{{#include ../haskell/GenServer.hs:ReplyChan}}
+```
+
+The idea is that only one message is ever sent to this channel. This
+is not something we can express within Haskell's type system (at least
+not without extensions that go beyond what we discuss in AP). We
+provide a function `reply` for sending a reply on a `ReplyChan`:
+
+```haskell
+{{#include ../haskell/GenServer.hs:reply}}
+```
+
+Finally, we provide a function `requestReply` that encapsulates the
+notion of creating a reply channel, providing it to a message
+constructor, and reading the response from the reply channel.
 
 ```haskell
 {{#include ../haskell/GenServer.hs:RequestReply}}
 ```
 
+If we avoid exporting the definition of `ReplyChan` from `GenServer`
+(meaning it is an abstract type), then `requestReply` is the *only*
+place one can read from the reply channel, which is exactly what we
+want.
 
 ## Method
 
@@ -407,13 +432,11 @@ In this example we want to make a server that keeps track of a count,
 a *counter server*. It should be possible to *get the value* of the
 counter, to *increment* the counter by one, or to *decrement* the
 counter by positive amount `n`. We will maintain the invariant that
-the counter is always non-negative.
-
-~~~admonish warning title='WIP: Text can be improved'
-Maybe explain why a counter server is a useful server. For instance it
-can be used to dynamically bound a resource, such a the number of
-threads started when traversing a tree.
-~~~
+the counter is always non-negative. While this is perhaps not a
+terribly useful server, it does demonstrate facilities that most
+servers will need; namely keeping some kind of state, responding to
+requests for changes to that state, and maintaining invariants for
+that state.
 
 ### Step 1: Internal state
 

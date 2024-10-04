@@ -52,20 +52,21 @@ spawn serverLoop = do
   return $ Server tid input
 -- ANCHOR_END: Spawn
 
--- ANCHOR: RequestReply
+-- ANCHOR: ReplyChan
 newtype ReplyChan a = ReplyChan (Chan a)
+-- ANCHOR_END: ReplyChan
 
-requestReply :: Server a -> (ReplyChan b -> a) -> IO b
-requestReply serv con = do
-  reply_chan <- ReplyChan <$> newChan
-  sendTo serv $ con reply_chan
-  receiveReply reply_chan
-
+-- ANCHOR: reply
 reply :: ReplyChan a -> a -> IO ()
 reply (ReplyChan chan) x = send chan x
+-- ANCHOR_END: reply
 
-receiveReply :: ReplyChan a -> IO a
-receiveReply (ReplyChan chan) = receive chan
+-- ANCHOR: RequestReply
+requestReply :: Server a -> (ReplyChan b -> a) -> IO b
+requestReply serv con = do
+  reply_chan <- newChan
+  sendTo serv $ con $ ReplyChan reply_chan
+  receive reply_chan
 -- ANCHOR_END: RequestReply
 
 data Timeout = Timeout
@@ -73,30 +74,30 @@ data Timeout = Timeout
 -- ANCHOR: ActionWithTimeout
 actionWithTimeout :: Int -> IO a -> IO (Either Timeout a)
 actionWithTimeout seconds action = do
-  chan <- ReplyChan <$> newChan
+  chan <- newChan
   _ <- forkIO $ do
     -- worker thread
     x <- action
-    reply chan $ Right x
+    send chan $ Right x
   _ <- forkIO $ do
     -- timeout thread
     threadDelay (seconds * 1000000)
-    reply chan $ Left Timeout
-  receiveReply chan
+    send chan $ Left Timeout
+  receive chan
 -- ANCHOR_END: ActionWithTimeout
 
 -- ANCHOR: ActionWithTimeoutKill
 actionWithTimeoutKill :: Int -> IO a -> IO (Either Timeout a)
 actionWithTimeoutKill seconds action = do
-  chan <- ReplyChan <$> newChan
+  chan <- newChan
   worker_tid <- forkIO $ do
     -- worker thread
     x <- action
-    reply chan $ Right x
+    send chan $ Right x
   _ <- forkIO $ do
     -- timeout thread
     threadDelay (seconds * 1000000)
     killThread worker_tid
-    reply chan $ Left Timeout
-  receiveReply chan
+    send chan $ Left Timeout
+  receive chan
 -- ANCHOR_END: ActionWithTimeoutKill
