@@ -331,7 +331,7 @@ Write some words that explains the code
 
 ## Method
 
-Following is a five step method to systematically designing and
+The following is a five step method to systematically designing and
 implementing a server. The steps are presented as sequential phases,
 but in practise there will be a bit of going back and forward between
 steps.
@@ -360,11 +360,11 @@ steps.
    These functions is the external interface for the server.
 
 3. Declare an internal type for the kind of messages (both external
-   messages and internal messages) that a server can receive.
+   and internal messages) a server can receive.
 
-   We use the pattern where we make constructor for each kind of
-   message and the argument to be send with that kind message. If
-   there is an expected reply to given kind of message, we use the
+   We use the pattern where we make a constructor for each kind of
+   message and the argument(s) to be send with that kind of message. If
+   there is an expected reply to the given kind of message, we use the
    convention that the last argument for that constructor is a channel
    for sending back the response. This convention is to make sure that
    we can use the `requestReply` function without too much bother.
@@ -503,9 +503,9 @@ technique we employ is based on three ingredients:
 
 1. we have a channel where we allow the reply to be either the
    intended value *or* a special timeout value.
-2. we start a worker thread to evaluating an action, and send the
+2. we start a worker thread, which will evaluate an action, and send the
    result back to us.
-3. we launch a extra thread that sleeps for some period of time, then
+3. we also launch an extra thread that sleeps for some period of time, then
    sends the timeout value to us.
 
 If the non-timeout response is the first to arrive, then the timeout
@@ -535,7 +535,9 @@ if `act` did not complete within the time limit:
 ```
 
 You will note that this is not a server in the `Genserver` sense, as it does
-not loop: it is simply a utility function that launches two threads.
+not loop: it is simply a utility function that launches two threads. Note also
+that `threadDelay` accepts an argument in microseconds, so wehave to multiply
+the provided timeout by one million.
 
 One downside of this function is that the worker thread (the one that
 runs `action`, and might take too long) is not terminated after the
@@ -768,8 +770,8 @@ data Msg a
 
 We modify `async` such that after creating the worker thread, we also
 create a thread that sends this message after the timeout has passed.
-Note that `threadDelay` accepts an argument in microseconds, so we
-have to multiply the provided timeout by one million.
+Remember that `threadDelay` expects its argument in microseconds, therefore we
+multiply the provided timeout by one million.
 
 ```Haskell
 async :: Seconds -> (a -> b) -> a -> IO (Async b)
