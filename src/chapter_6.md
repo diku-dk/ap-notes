@@ -240,7 +240,7 @@ threadLoop c = do
   msg <- readChan c
   case msg of
     MsgInc x from ->
-      writeChan (x + 1) from
+      writeChan from (x + 1)
   threadLoop c
 ```
 
