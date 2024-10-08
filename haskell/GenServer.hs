@@ -32,7 +32,7 @@ data Server msg = Server ThreadId (Chan msg)
 
 -- ANCHOR: SendReceive
 send :: Chan a -> a -> IO ()
-send chan msg = writeChan chan msg
+send = writeChan
 
 receive :: Chan a -> IO a
 receive = readChan
