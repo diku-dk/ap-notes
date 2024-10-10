@@ -58,20 +58,20 @@ newtype State s a = State (s -> (a, s))
 -- ANCHOR_END: State
 
 -- ANCHOR: Functor_State
-instance Functor (State env) where
+instance Functor (State s) where
   fmap = liftM
 
 -- ANCHOR_END: Functor_State
 
 -- ANCHOR: Applicative_State
-instance Applicative (State env) where
+instance Applicative (State s) where
   pure x = State $ \state -> (x, state)
   (<*>) = ap
 
 -- ANCHOR_END: Applicative_State
 
 -- ANCHOR: Monad_State
-instance Monad (State env) where
+instance Monad (State s) where
   State m >>= f = State $ \state ->
     let (x, state') = m state
         State f' = f x
