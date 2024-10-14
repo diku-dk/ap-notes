@@ -565,9 +565,9 @@ Since the exception handling machinery in Haskell is somewhat
 cumbersome, we may want to write a wrapper for `readFile` that returns
 a proper sum type with error conditions instead. Reading a file can go
 wrong in many ways (perhaps someone cuts a disk cable at an
-inopportune time), but there are often some common we want to handle
-specially, such as the file not existing. We define a sum type that
-captures the result of attempting to read a file:
+inopportune time), but there are often some common errors we want to
+handle specially, such as the file not existing. We define a sum type
+that captures the result of attempting to read a file:
 
 ```Haskell
 data FileContents
