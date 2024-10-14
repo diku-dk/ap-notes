@@ -1006,7 +1006,7 @@ type EventName = String
 
 type EventValue = Int
 
-type Event = (String, EventValue)
+type Event = (EventName, EventValue)
 ```
 
 Events come from the outside world, in unpredictable order and with
