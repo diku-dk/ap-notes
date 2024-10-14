@@ -204,7 +204,7 @@ Because we know that we will also be making `Free` a `Monad`, we can
 define the `<*>` method as `ap` from `Control.Monad.`
 
 ```Haskell
-{{#include ../haskell/Week4/Free.hs:1}}
+{{#include ../haskell/Week4/Free.hs:3}}
 ```
 
 ```Haskell
