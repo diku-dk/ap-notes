@@ -188,7 +188,7 @@ part.
 ```
 
 The `Pure` case is straightforward. For the `Free` case, we have a
-value `e` of type `e (Free e a)`, and we need to somehow transform
+value `g` of type `e (Free e a)`, and we need to somehow transform
 that `a` inside of it. The only way we can possibly operate inside of
 that `e` is if `e` *itself* is also a `Functor`, so we add that as a
 premise of the instance definition. This is the reason why the effect
