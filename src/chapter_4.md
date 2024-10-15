@@ -892,7 +892,7 @@ The `FibMemo` constructor has three components:
 The instance definition and the accessor functions are fairly
 straightforward; strongly resembling those we have seen before.
 
-```
+```Haskell
 instance Functor FibOp where
   fmap f (FibLog s x) = FibLog s $ f x
   fmap f (FibMemo n m c) = FibMemo n m $ \y -> f (c y)
