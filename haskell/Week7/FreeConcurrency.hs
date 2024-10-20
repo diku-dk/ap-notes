@@ -1,6 +1,7 @@
 module Week6.FreeConcurrency where
 
 import Control.Concurrent (Chan, forkIO, newChan, readChan, writeChan)
+import Control.Monad (forever)
 import Data.Maybe (fromMaybe)
 import Week2.ReaderState (State, get, put, runState)
 import Week4.Free (Free (..))
@@ -98,7 +99,7 @@ step (Free (CCFork m c)) = do
 step (Free (CCSend chan_id msg c)) = do
   msgs <- getChan chan_id
   setChan chan_id $ msgs ++ [msg]
-  step c
+  pure c
 step (Free (CCReceive chan_id c)) = do
   msgs <- getChan chan_id
   case msgs of
@@ -155,3 +156,18 @@ demoIO = print =<< interpCCIO pipeline
 
 demoPure :: IO ()
 demoPure = print $ interpCCPure pipeline
+
+infiniteWrite :: CC chan String
+infiniteWrite = do
+  chan <- ccNewChan
+  ccFork $ forever $ ccSend chan "x"
+  a <- ccReceive chan
+  b <- ccReceive chan
+  pure $ a ++ b
+
+infiniteLoop :: CC chan String
+infiniteLoop = do
+  chan <- ccNewChan
+  ccFork $ forever $ pure ()
+  ccFork $ ccSend chan "x"
+  ccReceive chan

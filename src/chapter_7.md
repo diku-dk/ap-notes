@@ -96,7 +96,7 @@ interpCCIO (Free (CCReceive chan c)) = do
 
 And now we can write a contrived little program that passes a message
 through a chain of threads, each adding a token to the message and
-passing it to the next process:
+passing it to the next thread:
 
 ```Haskell
 pipeline :: CC String
@@ -490,3 +490,103 @@ And we can see that things work:
 One limitation of this approach, which is not present in `interpCCIO`,
 is that we cannot handle infinite loops in *pure* code. We are only
 able to switch between threads when `step` encounters an effect.
+
+### Remaining Issues
+
+Although the interpreter developed above works in some cases, it has
+undesirable behaviour for others. Consider a program that creates a
+channel and thread that runs an infinite loop that continuously writes
+to the channel. The main thread reads twice from the channel,
+concatenates the messages, and returns:
+
+```Haskell
+infiniteWrite :: CC chan String
+infiniteWrite = do
+  chan <- ccNewChan
+  ccFork $ forever $ ccSend chan "x"
+  a <- ccReceive chan
+  b <- ccReceive chan
+  pure $ a ++ b
+```
+
+Using the IO-based interpreter, we observe the following result, as
+expected:
+
+```Haskell
+> interpCCIO infiniteWrite
+"xx"
+```
+
+Since the main thread terminates in finite time, it doesn't matter
+that some secondary thread is still running (although it's not great
+that it continues to run and causes the channel to grow infinitely -
+it would be better if `interpCCIO` kept track of launched threads and
+killed them at the end).
+
+Now let us try running the program using the pure interpreter:
+
+```Haskell
+> interpCCPure infiniteWrite
+```
+
+You will find that this goes into an infinite loop. This occurs due to
+`stepThreads`, which will evaluate every thread with `step` until the
+next time it blocks on a channel. But since the thread we have forked
+will *never* read from a channel, `step` will continue recursively
+evaluating it forever - preventing any other thread from being
+executed. To fix this, we modify the `CCSend` case in `step` such that
+we do not evaluate the continuation, but merely return it:
+
+```Haskell
+step (Free (CCSend chan_id msg c)) = do
+  msgs <- getChan chan_id
+  setChan chan_id $ msgs ++ [msg]
+  pure c -- This line was prevously 'step c'.
+```
+
+This does not prevent the computation from progressing, since we still
+do *some* work whenever `step` is invoked, and `step` is anyway
+invoked repeatedly in a loop.
+
+Now computation terminates as expected:
+
+```Haskell
+> interpCCPure infiniteWrite
+"xx"
+```
+
+But consider now this program:
+
+```Haskell
+infiniteLoop :: CC chan String
+infiniteLoop = do
+  chan <- ccNewChan
+  ccFork $ forever $ pure ()
+  ccFork $ ccSend chan "x"
+  ccReceive chan
+```
+
+Here we fork two threads: one goes into an infinite loop that does
+nothing, while the other thread sends a message on a channel. The main
+thread receives a message from a channel, which is returned. Execution
+with `interpCCIO` works fine, but `interpCCPure` goes into an infinite
+loop. In this case, however, the loop is in *pure* code, rather than
+being an infinite list of effects. This means that we have no way of
+interrupting it. Operationally, `step` is stuck on evaluating the
+(never terminating) thread to figure out which kind of effect it
+evaluates to.
+
+There is a deep lesson here: when interpreting a free monad, the only
+time we can "interrupt" computation and get back control is when an
+effect occurs, so there is no way we can avoid this problem in
+`interpCCPure`. The IO-based concurrency from `Control.Concurrency`
+uses machine-level interrupts to suspend even pure computation, and
+therefore does not have this problem. If we could somehow force
+computations to issue an effect from time to time, this would not be a
+problem. In fact, one could easily imagine that Haskell itself could
+have implemented concurrency by injecting "suspension effects" into
+the generated code. However, Haskell does not allow us to inject
+effects into otherwise pure code. If we have control over how the
+computations using the free monad are constructed, we can of course
+ensure that effects occur regularly - we could even imagine a "step"
+effect that serves no purpose except to interrupt computation.
