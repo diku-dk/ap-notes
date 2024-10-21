@@ -1313,3 +1313,76 @@ powerful than monadic ones - specifically, they can handle only
 context-free languages.
 
 ~~~
+
+## Parsing Comments
+
+Most grammars allow some form of comment notation that is ignored when
+parsing, but hopefully provides useful information to human readers.
+In this section we will extend the parser described above to support
+classic Unix-style *line comments*, where the character `#` begins a
+comment that continues to the next linebreak. For example, we want the
+following string to parse:
+
+```
+x   # here goes a comment
+and # and
+y   # another
+    # one
+```
+
+It turns out that comments are quite easy to support in a
+combinator-based parser. Specifically, we simply treat comments as a
+kind of whitespace and implement them in our `space` combinator.
+Recall that it currently looks like this:
+
+```Haskell
+space :: Parser ()
+space = do
+  _ <- many $ satisfy isSpace
+  pure ()
+```
+
+First we write a parser that parses a line comment.
+
+```
+comment :: Parser ()
+comment = void $ do
+  void $ chunk "#"
+  many $ satisfy (/= '\n')
+```
+
+```
+> parseTest comment "#foo"
+()
+> parseTest comment "#foo\n"
+()
+> parseTest comment "foo"
+1:1:
+  |
+1 | foo
+  | ^
+unexpected 'f'
+expecting '#'
+```
+
+As desired, it succeeds only when we parse a comment. Now we modify
+the `space` parser to parse whitespace, followed by a comment, and
+*if* we parse a comment, then we recursively invoke `space`. This
+ensures `space` will onsume arbitrary combinations of spaces and
+comments.
+
+```
+> parseTest (space *> eof) "\n#foo\n#bar\n"
+()
+```
+
+Because of the principled design of our parser, that is actually all
+we need to in order to support comments:
+
+```
+> putStrLn "x # comment\nand y"
+x # comment
+and y
+λ> parseBExp "" "x # comment\nand y"
+Right (And (Var "x") (Var "y"))
+```

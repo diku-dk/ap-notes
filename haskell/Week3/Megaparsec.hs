@@ -19,10 +19,20 @@ import Text.Megaparsec
 
 type Parser = Parsec Void String
 
+comment :: Parser ()
+comment = void $ do
+  void $ chunk "#"
+  many $ satisfy (/= '\n')
+
 space :: Parser ()
 space = do
   _ <- many $ satisfy isSpace
-  pure ()
+  choice
+    [ do
+        comment
+        space,
+      pure ()
+    ]
 
 lexeme :: Parser a -> Parser a
 lexeme p = do
