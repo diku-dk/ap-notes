@@ -77,7 +77,7 @@ to how closely our effects match the interface provided by
 `Control.Concurrency`:
 
 ```Haskell
-interpCCIO :: CC (Chan Msg) a -> IO a
+interpCCIO :: CC a -> IO a
 interpCCIO (Pure x) =
   pure x
 interpCCIO (Free (CCFork m c)) = do
