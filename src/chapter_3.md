@@ -22,7 +22,7 @@ The function `ord :: Char -> Int` from `Data.Char` can convert a
 character into its corresponding numeric code. Exploiting the fact
 that the integers have consecutive codes, we can write a function for
 converting a digit character into its corresponding `Integer`. Note
-that we have to convert the `Int` produce by `ord` into an `Integer`:
+that we have to convert the `Int` produced by `ord` into an `Integer`:
 
 ```Haskell
 import Data.Char (ord)
