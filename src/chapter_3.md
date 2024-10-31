@@ -121,7 +121,7 @@ along with the remaining string.
 
 ```
 > readLeadingInteger "123"
-Just (321,"")
+Just (123,"")
 > readLeadingInteger "123 456"
 Just (123," 456")
 ```
@@ -487,7 +487,7 @@ For example, this would now be a parser for decimal integers that
 consumes trailing whitespace:
 
 ```
-lDecimal :: Integer
+lDecimal :: Parser Integer
 lDecimal = lexeme $ loop 1 . reverse <$> some parseDigit
   where
     loop _ [] = 0
@@ -553,7 +553,8 @@ many p =
     ]
 ```
 
-Then we would observe the following behaviour:
+Then we would observe the following behaviour (because `lDecimal` uses
+`some`, which uses `many`):
 
 ```
 > runParser lDecimal "123"
@@ -576,6 +577,7 @@ following Haskell datatype.
 data BExp
   = Lit Bool
   | Var String
+  | Not BExp
   | And BExp BExp
   | Or BExp BExp
   deriving (Eq, Show)
@@ -636,7 +638,11 @@ pBool =
         pure True,
       do
         chunk "false"
-        pure False
+        pure False,
+      do
+        chunk "not"
+        e <- pBExp
+        pure $ Not e
     ]
 
 pBExp :: Parser BExp
