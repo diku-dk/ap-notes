@@ -1,4 +1,4 @@
-module Week5.Properties where
+module Week6.Properties where
 
 import Test.QuickCheck
 
@@ -35,31 +35,31 @@ list2 g = frequency [(1, pure []), (9, (:) <$> g <*> list1 g)]
 -- ANCHOR: List3
 list3 :: Gen a -> Gen [a]
 list3 g = abs <$> (arbitrary :: Gen Int) >>= go
-    where
-        go 0 = pure []
-        go n = (:) <$> g <*> go (n - 1)
+  where
+    go 0 = pure []
+    go n = (:) <$> g <*> go (n - 1)
 
 -- ANCHOR_END: List3
 
 -- ANCHOR: List4
 list4 :: Gen a -> Gen [a]
 list4 g = sized $ \n -> chooseInt (0, n) >>= go
-    where
-        go 0 = pure []
-        go n = (:) <$> g <*> go (n - 1)
+  where
+    go 0 = pure []
+    go n = (:) <$> g <*> go (n - 1)
 
 -- ANCHOR_END: List4
 
 -- ANCHOR: Pair
 data Pair a b = Pair a b
-    deriving Show
+  deriving (Show)
 
 -- ANCHOR: PairShrink
 instance (Arbitrary a, Arbitrary b) => Arbitrary (Pair a b) where
-    arbitrary = Pair <$> arbitrary <*> arbitrary
+  arbitrary = Pair <$> arbitrary <*> arbitrary
 
--- ANCHOR_END: Pair
-    shrink (Pair x y) = [Pair x' y | x' <- shrink x] ++ [Pair x y' | y' <- shrink y]
+  -- ANCHOR_END: Pair
+  shrink (Pair x y) = [Pair x' y | x' <- shrink x] ++ [Pair x y' | y' <- shrink y]
 
 -- ANCHOR_END: PairShrink
 

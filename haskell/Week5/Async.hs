@@ -1,4 +1,4 @@
-module Week6.Async
+module Week5.Async
   ( Async,
     Result (..),
     async,

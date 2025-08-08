@@ -1,4 +1,4 @@
-module Week6.Basics where
+module Week5.Basics where
 
 import Control.Concurrent
   ( Chan,
