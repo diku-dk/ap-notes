@@ -630,19 +630,18 @@ lAnd = lexeme $ void $ chunk "and"
 lOr :: Parser ()
 lOr = lexeme $ void $ chunk "or"
 
+lNot :: Parser ()
+lNot = lexeme $ void $ chunk "not"
+
 pBool :: Parser Bool
 pBool =
   choice
     [ do
-        chunk "true"
+        lTrue
         pure True,
       do
-        chunk "false"
+        lFalse
         pure False,
-      do
-        chunk "not"
-        e <- pBExp
-        pure $ Not e
     ]
 
 pBExp :: Parser BExp
@@ -659,7 +658,11 @@ pBExp =
         x <- pBExp
         lOr
         y <- pBExp
-        pure $ Or x y
+        pure $ Or x y,
+      do
+        lNot
+        e <- pBExp
+        pure $ Not e
     ]
 ```
 
