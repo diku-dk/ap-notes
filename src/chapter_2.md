@@ -128,8 +128,8 @@ or using backticks to make the operator infix:
 x `maybeBind` f
 ```
 
-The intuition here is "first execute `x`, then apply the pure result
-(if any) to `f`".
+The intuition here is "first execute `x` to produce some pure value, then pass
+this pure value to the function `f`".
 
 It turns out that functions with the same "shape" as `maybeBind` are
 pretty common. For example, we can define a similar one for `Either`,
