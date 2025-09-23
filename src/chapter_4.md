@@ -969,7 +969,8 @@ monad, as the way we handle the cache is identical to how `State`
 handles state.
 
 Now even large applications of `fib` finish almost instantaneously, as
-memoisation transforms the exponential complexity to linear:
+memoisation transforms the exponential number of recursive calls to a linear
+number of recursive calls:
 
 ```
 > memoFibM $ fib 1000
