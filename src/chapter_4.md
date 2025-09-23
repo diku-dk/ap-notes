@@ -1097,7 +1097,7 @@ divider = do
 ```
 
 Once you have finished with this section, and you have seen how the
-sausage is made, I suggest returning to these definitions and normal
+sausage is made, we suggest returning to these definitions and note
 how *normal* they look. The complexity of how they are actually
 executed is completely hidden by the monad abstraction.
 
