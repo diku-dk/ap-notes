@@ -993,20 +993,18 @@ out of the exposition here.
 
 ### Asynchronous Programming with Free Monads
 
-Asynchronous programming styles have become common in languages
-targeted towards network programming, often support by language
-features such as async/await facilities. The purpose of such language
-features is to *hide* the somewhat contorted control flow otherwise
-required by asynchronous programming. For example, a program often
-needs to *wait* for an event to happen. Operationally, this happens by
-suspending the current computation, recording its state in a data
-structure somewhere. Whenever an event comes in, it is checked whether
-any suspended computations depend on it, and if so, they are resumed
-until the next time they need to be suspended. However, exposing all
-this complexity leads to a very awkward programming experience.
-Instead, we would like to simply have a seemingly normal function that
-*blocks* until the requested event arrives - but of course without
-suspending the entire system. We shall now see how this can be
+Asynchronous programming styles have become common in languages targeted towards
+network programming, often supported by language features such as async/await
+facilities. The purpose of such language features is to *hide* the somewhat
+contorted control flow otherwise required by asynchronous programming. For
+example, a program often needs to *wait* for an event to happen. Operationally,
+this happens by suspending the current computation by recording its state in a
+data structure somewhere. Whenever an event comes in, it is checked whether any
+suspended computations depend on it, and if so, they are resumed until the next
+time they need to be suspended. However, exposing this directly leads to a very
+awkward programming experience. Instead, we would like to have a seemingly
+normal function that *blocks* until the requested event arrives - but of course
+without suspending the entire system. We shall now see how this can be
 accomplished using a design based on free monads.
 
 We start by defining a *very* simple model of events. An event is a
