@@ -764,7 +764,7 @@ newtype Q unit = Q Double
 ```
 
 We can use `newtype` whenever we define a datatype with a single constructor
-that has a single-value - intuitively, whenever we simply "wrap" an underlying
+that has a single value - intuitively, whenever we simply "wrap" an underlying
 type. The difference between `data` and `newtype` are semantically almost nil
 (and the edge case does not matter for this course), but `newtype` is slightly
 more efficient, as the constructor does not exist when the program executes,
