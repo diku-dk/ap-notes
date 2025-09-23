@@ -1089,7 +1089,7 @@ Megaparsec is to define the following type synonym:
 ```Haskell
 import Data.Void (Void)
 
-type Parser = Parsec Void String
+type Parser a = Parsec Void String a
 ```
 
 This states that our `Parser`s will have no special error component,
