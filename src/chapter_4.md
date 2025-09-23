@@ -843,6 +843,15 @@ It is easy to imagine how this could be useful for testing the pure
 logic for logging, without actually interacting with a complicated
 logging infrastructure.
 
+
+~~~admonish warning
+The list concatenation `msgs ++ [s]` is quite inefficient, and means that
+logging has quadratic cost in the number of log messages. An efficient
+implementation would either prepend the log messages and reverse at the end, or
+use a data structure with more efficient support for appending new elements.
+This is however orthorgonal to the issue of free monads.
+~~~
+
 ### Adding Another Effect
 
 Above we saw how we could interpret the same effectful function
