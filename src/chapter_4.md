@@ -985,10 +985,11 @@ perhaps with limitations on the maximum size of stored results, or
 some expiry policy that removes entries after a time. All of these
 changes can be made without modifying `fib` itself.
 
-Another useful change would be to allow memoisation of arguments and
-results that are not exclusively of type `Int` (or some other fixed
-type). This is not particularly difficult, although somewhat more
-verbose, and so we have left it out of the exposition here.
+Another useful change would be to allow memoisation of arguments and results
+that are not exclusively of type `Int` (or some other fixed type), or to use a
+more efficient data structure than a list to store the cache. This is not
+particularly difficult, although somewhat more verbose, and so we have left it
+out of the exposition here.
 
 ### Asynchronous Programming with Free Monads
 
