@@ -1,14 +1,13 @@
 # Concurrent Programming
 
-Haskell offers a wide range of facilities to support for different
-styles of concurrent and parallel programming. In this chapter we focus
-on a limited set of primitives for *concurrent programming* which can
-often be found in similar form in other modern programming
-languages. We use:
+Haskell offers a wide range of facilities for different styles of concurrent and
+parallel programming. In this chapter we focus on a limited set of primitives
+for *concurrent programming*, which can often be found in similar forms in other
+modern programming languages. We use:
 
  * Lightweight independent **threads** of control.
 
-   Lightweight means we can create many threads without worrying about
+   "Lightweight" means we can create many threads without worrying about
    overhead (up to a couple of hundred thousand is usually fine).
 
  * **Channels** for communicating between threads.
@@ -28,12 +27,15 @@ approach is perfectly suitable for distributed systems, as seen in for
 example [Cloud Haskell](http://haskell-distributed.github.io/), or
 languages such as Erlang and Elixir.
 
-Concurrency is closely related to (but not the same as) *parallelism*.
-While multi-threading in Haskell is indeed one way to take advantage
-of parallel multi-core computers, this is not an explicit aspect of
-our study of concurrency. Instead, we focus on concurrency as a
-programming model which happens to be convenient for expressing
-certain forms of event-driven systems.
+Concurrency is closely related to (but not the same as) *parallelism*. While
+multi-threading in Haskell is indeed one way to take advantage of parallel
+multi-core computers, this is not an explicit aspect of our study of
+concurrency. Instead, we focus on concurrency as a programming model which
+happens to be convenient for expressing certain forms of event-driven systems.
+Indeed, while the purpose of parallelism is specifically to obtain better
+performance, we will for didactic reasons use an excessive amount of concurrency
+in many cases, such that our programs are likely to be slower than if they were
+written in a sequential style.
 
 Concurrent programming in Haskell is done in the `IO` monad because
 threads are executed for their effects. Threads do not have a "return
@@ -45,6 +47,7 @@ Concurrent programming allows programs that interact with multiple
 external agents to be modular:
 
  * The interaction with each agent is programmed separately
+
  * Allows programs to be structured as a collection of interacting
    agents, sometimes called **actors** or (mini) **servers**.
 
@@ -164,7 +167,7 @@ Receive message: Hello there.
 Whenever we create a thread, we will also create a channel through
 which we can communicate with the thread. Typically the thread will
 run a loop that repeatedly reads from the channel and responds to
-message.
+messages.
 
 ~~~admonish example
 
@@ -225,8 +228,10 @@ machinery. The way we make it work is by creating a new channel that
 is used for transmitting the result. This channel is then sent along
 as part of the message.
 
-The starting point (and always good practice) is to define an explicit
-type for the messages we would like to send.
+To demonstrate the idea, consider a rather contrived server that receives
+message containing an integer, and responds with that integer incremented by
+one. The starting point (and always good practice) is to define an explicit type
+for the messages we would like to send.
 
 ```Haskell
 data Msg = MsgInc Int (Chan Int)
@@ -244,8 +249,8 @@ threadLoop c = do
   threadLoop c
 ```
 
-Given a handle to a channel of type `Chan Msg`, we can then send a
-message, and wait for a response, as follows:
+Given a handle to a channel of type `Chan Msg`, we can send a message, and wait
+for a response, as follows:
 
 ```Haskell
 performRPC :: Chan Msg -> Int -> IO Int
