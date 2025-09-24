@@ -641,7 +641,7 @@ pBool =
         pure True,
       do
         lFalse
-        pure False,
+        pure False
     ]
 
 pBExp :: Parser BExp
@@ -649,6 +649,10 @@ pBExp =
   choice
     [ Lit <$> pBool,
       Var <$> lVar,
+      do
+        lNot
+        e <- pBExp
+        pure $ Not e,
       do
         x <- pBExp
         lAnd
@@ -658,11 +662,7 @@ pBExp =
         x <- pBExp
         lOr
         y <- pBExp
-        pure $ Or x y,
-      do
-        lNot
-        e <- pBExp
-        pure $ Not e
+        pure $ Or x y
     ]
 ```
 
@@ -684,8 +684,8 @@ Just (Lit True,"")
 Just (Var "not","x")
 ```
 
-The third case doesn't work. How can that be? The reason it goes wrong
-can be seen by trying to parse a variable name:
+The third input (`"not x"`) doesn't work. How can that be? The reason it goes
+wrong can be seen by trying to parse a variable name:
 
 ```
 > runParser lVar "not"
