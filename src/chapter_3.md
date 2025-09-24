@@ -1240,7 +1240,7 @@ list instructor `(:)`, we can instead write `many` as:
 many :: Parser a -> Parser [a]
 many p =
   choice
-    [ (:) <$> p <*> many ps,
+    [ (:) <$> p <*> many p,
       pure []
     ]
 ```
