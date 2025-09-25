@@ -276,9 +276,9 @@ do x <- foo
 is syntactic sugar for
 
 ```Haskell
-foo >>=
-(\x -> bar >>=
- (\y -> baz x y))
+foo >>= \x ->
+bar >>= \y ->
+baz x y
 ```
 
 We can break a single statement over multiple lines if we are careful
