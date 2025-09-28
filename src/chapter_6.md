@@ -390,11 +390,13 @@ First we will need to import some library functions.
 Our representation of `DynamicArray` will be quite similar to what you may have
 seen in systems programming classes, or implemented yourself. The idea is to
 have an underlying array with room for more elements than have actually been
-inserted yet. We call the size of this array the *capacity*. When the number of
-elements inserted by the user exceeds the capacity, then we bump the capacity by
-some factor, allocate a new array of that size, then copy the old elements to
-the new array. If we always double the capacity, then it can be shown that
-appending an element can be done in constant amortised time.
+inserted yet, with the inserted elements all being at the front of the array,
+such that there is room to grow at the end. We call the size of this array the
+*capacity*. When the number of elements inserted by the user exceeds the
+capacity, then we bump the capacity by some factor, allocate a new array of that
+size, then copy the old elements to the new array. If we always double the
+capacity, then it can be shown that appending an element can be done in constant
+amortised time.
 
 ```Haskell
 {{#include ../haskell/Week6/Stateful.hs:Stateful_DynamicArray}}
@@ -603,3 +605,20 @@ Program [Insert 21,Insert (-33),Insert (-55),Insert 46,Insert (-48),Insert 47,In
 We are not told exactly what is wrong (this is an exception thrown from the
 underlying array library), but we are given a sequence of commands that reliably
 lead to the problem, and which we can use to debug the problem.
+
+It is important to realise that although this particular test is of a piece of
+code that happens to be implemented Haskell, same as the model, there is no real
+requirement for it. The idea just requires that there is some handle
+representing the SUT (in our case, `DynamicArray`) and some operation (which may
+be in `IO`) that can perform state changes based on `Command`s. There is nothing
+that fundamentally prevents us from testing a remote network service with this
+approach, the control system for a robot, or for that matter a C library invoked
+through a foreign-function interface. We might in those cases need to write more
+complicated `exec` functions, of course.
+
+Finally, you may rightly object that the amount of infrastructure needed to
+perform testing of this kind is rather large - in fact, our test harness is more
+lines of code than all of the `DynamicArray` implementation. This is a fair
+objection, but real systems will tend to grow in complexity much faster than
+their models, so this is a technique that scales well as the SUT grows
+complicated, although it is often impractical for testing the simplest systems.
