@@ -1,5 +1,9 @@
 # Property-Based Testing
 
+In the following we elaborate on the idea of testing functions by stating
+properties that are expected to hold for them, then verify the function
+implementations through randomly generated test cases.
+
 ## Properties
 
 When dealing with type classes we discussed the concept of *laws*, which are
@@ -228,7 +232,7 @@ generate a non-negative integer `n`, and then generate a list of length `n`:
 {{#include ../haskell/Week6/Properties.hs:List3}}
 ```
 
-Now the distribution is similar to QuickCheck's `listOf`. 
+Now the distribution is similar to QuickCheck's `listOf`.
 
 ```
 > sample $ list3 (arbitrary :: Gen Integer)
@@ -333,3 +337,269 @@ control the number of tests we can run
 ```
 $ cabal test --test-option --quickcheck-tests=10000
 ```
+
+## Testing stateful systems
+
+The examples above assume that we are testing a pure function where properties
+are involve a relationship between the inputs and outputs of the function.
+Regrettably however, many computer systems are *stateful* - they encapsulate
+some internal data, which is modified in response to commands, and divulges
+information in response to requests. A network service a clean example of a
+stateful system, but even a conventional mutable data structure, such as a
+resisable array, fits the definition.
+
+Large stateful systems are often complicated and error-prone, and hence it is
+very desirable to be able to test them effectively. It turns out that
+property-based testing is also an effective approach for such systems (and in
+industry, this may even be the most impactful use case), although it requires us
+to build some additional infrastructure.
+
+The basic idea is that we take the so-called *software under test* (SUT) and
+construct a *model* that captures the most important properties of the SUT. In
+many cases a stateful system has implementation details that are important to
+its operation (such as caching, optimisations, persistency in a database,
+integration with other systems, etc), but which are not part of its external
+interface. A model is a program that imitates some subset of the behaviour of
+the SUT, and is typically much simpler than the SUT. We then randomly generate
+commands that interact with the SUT and the model, and test that the observable
+behaviour is the same. Essentially, the model is an executable specification
+that we compare against the SUT.
+
+One very important detail is that there is no requirement that the SUT is
+implemented in the same language as the property-based testing framework (e.g.,
+Haskell in our case). Indeed, it is a common approach to construct a model in
+Haskell and use QuickCheck to verify that some other network-based system
+matches the behaviour of the model. This is particularly useful when the choice
+of technology for the SUT is constrained due to efficiency or integration
+concerns.
+
+### A sample stateful system
+
+The SUT we will test in the following does happen to be implemented in Haskell
+for simplicity. Specifically, we will define a datatype `DynamicArray a` for
+mutable arrays of elements of type `a` with efficient support for appending
+elements. Since the array is mutable, it will live in `IO`. The implementation
+details of the array are not important, and so will be covered somewhat briefly.
+
+First we will need to import some library functions.
+
+```Haskell
+{{#include ../haskell/Week6/Stateful.hs:Stateful_Imports}}
+```
+
+Our representation of `DynamicArray` will be quite similar to what you may have
+seen in systems programming classes, or implemented yourself. The idea is to
+have an underlying array with room for more elements than have actually been
+inserted yet. We call the size of this array the *capacity*. When the number of
+elements inserted by the user exceeds the capacity, then we bump the capacity by
+some factor, allocate a new array of that size, then copy the old elements to
+the new array. If we always double the capacity, then it can be shown that
+appending an element can be done in constant amortised time.
+
+```Haskell
+{{#include ../haskell/Week6/Stateful.hs:Stateful_DynamicArray}}
+```
+
+Because we need to modify both the element count and the capacity, we put them
+in a mutable `IORef`. The underlying array is an `IOArray Int a`, which is a
+mutable (but non-resizable) provided by Haskell. The `Int` type argument is the
+index type, which can be used to represent multidimensional arrays, but we will
+not make use of this.
+
+~~~admonish note
+
+The interface to `IOArray` is through various class-polymorphic functions
+defined by `Data.Array.MArray`. For simplicity of exposition, the types in the
+following have been monomorphised to be specific to `IOArray`.
+
+~~~
+
+An `IOArray` is produced by the function `newArray_` of the following type:
+
+```Haskell
+newArray_ :: (Int,Int) -> IO (IOArray Int a)
+```
+
+The `(Int,Int)` pair is the smallest and largest valid index (these arrays do
+not have to start at zero, although ours do). Initially, all elements of the
+array will be undefined. Reading an undefined element will cause an IO
+exception.
+
+We arbitrarily decide that the initial capacity of our dynamic arrays will be
+10.
+
+```Haskell
+{{#include ../haskell/Week6/Stateful.hs:Stateful_newDynamicArray}}
+```
+
+When indexing an array we check whether the index is in-bounds, returning
+`Nothing` if not.
+
+```Haskell
+{{#include ../haskell/Week6/Stateful.hs:Stateful_index}}
+```
+
+Inserting always succeeds and produces no result beyond modifying the array, but
+we have to resize the underlying array if the new element causes the capacity to
+be exceeded.
+
+```Haskell
+{{#include ../haskell/Week6/Stateful.hs:Stateful_insert}}
+```
+
+Overwriting an existing element is quite similar to indexing. We return
+`Nothing` on out-of-bounds, and `Just ()` on success.
+
+```Haskell
+{{#include ../haskell/Week6/Stateful.hs:Stateful_write}}
+```
+
+Our final operation allows the deletion of an element anywhere in the array.
+This is a somewhat costly operation, as we have to shift all elements after the
+deleted one left. Further, to avoid using too much memory, if the capacity is
+too large after the deletion, we shrink the array. back down to a smaller size.
+As before, we return `Nothing` in case the index is out of bounds.
+
+```Haskell
+{{#include ../haskell/Week6/Stateful.hs:Stateful_delete}}
+```
+
+### Defining a model
+
+There is a lot of intricate index-fiddling code in the above. Can we really be
+sure it is correct? At a semantic level, what `DynArray` is doing is not
+complicated - it is merely maintaining a sequence of elements. The complexity
+comes from our desire for certain performance characteristics. Let us define a
+model that captures the central behaviour of `DynArray`, but without caring
+about operational matters such as performance.
+
+```Haskell
+{{#include ../haskell/Week6/Stateful.hs:Stateful_Model}}
+```
+
+A model is described by its internal state and by which *commands* can be sent
+to it, and which *responses* may be produced in return. These commands usually
+resemble the API of the SUT, but perhaps simplified in various ways. Due to the
+simplicity of the system we are testing here, the commands are however fairly
+simple.
+
+```Haskell
+{{#include ../haskell/Week6/Stateful.hs:Stateful_Command}}
+```
+
+We then define functions corresponding to each of the commands. Each function
+returns a new model state, as well as a response. For example, the function
+corresponding to an insertion is defined as follows.
+
+```Haskell
+{{#include ../haskell/Week6/Stateful.hs:Stateful_cmdInsert}}
+```
+
+We define functions for the remaining commands, and finally a `step` function
+for simulating the effect of running a certain `Command` on a `Model`:
+
+```Haskell
+{{#include ../haskell/Week6/Stateful.hs:Stateful_step}}
+```
+
+Similarly, we also define a function for executing a `Command` on our SUT. This
+involves mapping the SUT API to the `Command`/`Response` types, which in our
+case is quite simple, but can sometimes a bit laborious.
+
+```Haskell
+{{#include ../haskell/Week6/Stateful.hs:Stateful_exec}}
+```
+
+### Specifying a property
+
+We denote a sequence of commands as a *program*. The testing problem is now to
+ensure that the SUT and the model behave identically for all programs.
+
+```Haskell
+{{#include ../haskell/Week6/Stateful.hs:Stateful_Program}}
+```
+
+First of course, we have to define appropriate `Arbitrary` instances. We are
+going to define these in quite a simple way - the previous remarks about good
+generators still apply, but it turns out we can explore a lot of the test space
+even without putting any particular thought into it.
+
+```Haskell
+{{#include ../haskell/Week6/Stateful.hs:Stateful_Arbitrary_Command}}
+```
+
+Let us look at what programs end up being generated.
+
+```Haskell
+> sample (arbitrary :: Gen (Program Int))
+Program []
+Program [Insert (-2),Insert (-2)]
+Program []
+Program [Index 6,Insert 1]
+Program [Delete 0]
+Program []
+Program [Write 4 4,Write (-2) (-12),Index 9,Write (-8) 12,Insert (-5),Delete 5,Index 6]
+Program [Write 9 (-12),Index (-7),Delete 10,Write (-2) (-5),Insert (-6),Write 13 13,Insert 12]
+Program []
+Program [Write (-18) 12,Insert (-8),Insert 9,Insert (-8),Insert (-10),Delete (-6),Index (-12),Index (-4),Delete (-6),Index (-16),Index (-10),Index (-14),Delete 17]
+Program [Write 15 13,Delete (-11),Insert (-20)]
+```
+
+It is clear that once again, we generate a good number of empty programs, but we
+also generate a good bit of *invalid* ones. Look at how many of them perform
+`Index` or `Delete` commands without first inserting some elements. It is good
+and necessary to test these cases, but perhaps they are generated too often.
+Generating good sequences of commands for complicated stateful systems is an
+interesting topic in itself, but the above is sufficient for our needs.
+
+Next we generate a procedure for executing a `Program a` on both a `DynamicArray
+a` and a `Model a`, producing a boolean that indicates whether the same
+responses were observed. Recall that we cannot directly inspect the internal
+state of a `DynamicArray`, but we *can* chcek its observable behaviour.
+
+```Haskell
+{{#include ../haskell/Week6/Stateful.hs:Stateful_runProgram}}
+```
+
+Finally, we just need to construct a property that uses `runProgram`. The
+crucial building block is the function `ioProperty`, which allows us to turn an
+arbitrary IO operation into a `Property`:
+
+```
+ioProperty :: Testable prop => IO prop -> Property
+```
+
+We must of course be very careful when using this function, as it is easy to use
+it to construct a property that behaves nondeterministically, which can make it
+difficult for QuickCheck to shrink test cases properly. In our case we are
+merely using it to construct the initial dynamic array and to execute
+`runProgram`:
+
+```Haskell
+{{#include ../haskell/Week6/Stateful.hs:Stateful_prop_array}}
+```
+
+Finally we can verify the property.
+
+```Haskell
+> quickCheck prop_array
++++ OK, passed 100 tests.
+```
+
+Of course, to demonstrate that things really work, let us introduce a bug. For
+example, let us remove the line `writeArray arr' used x` from the `else`-branch
+in the definition of `insert` and rerun the tests:
+
+```
+> quickCheck prop_array
+*** Failed! (after 56 tests and 13 shrinks):
+Exception:
+  MArray: undefined array element
+  CallStack (from HasCallStack):
+    error, called at libraries/array/Data/Array/Base.hs:914:16 in array-0.5.8.0-74ab:Data.Array.Base
+Program [Insert 21,Insert (-33),Insert (-55),Insert 46,Insert (-48),Insert 47,Insert 37,Insert 19,Insert (-35),Insert (-37),Insert 55,Delete 0,Index 9]
+```
+
+We are not told exactly what is wrong (this is an exception thrown from the
+underlying array library), but we are given a sequence of commands that reliably
+lead to the problem, and which we can use to debug the problem.

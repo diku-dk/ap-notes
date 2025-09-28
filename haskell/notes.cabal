@@ -11,8 +11,9 @@ library
     import: common
     hs-source-dirs: .
     build-depends:
-                      base
+                    base
                   , megaparsec >= 9.6.1
+                  , array
                   , QuickCheck
                   , tasty
                   , tasty-hunit
@@ -32,3 +33,4 @@ library
         Week5.Basics
         Week5.Counter
         Week6.Properties
+        Week6.Stateful
