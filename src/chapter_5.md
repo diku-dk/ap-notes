@@ -299,9 +299,8 @@ server as a pair: a `ThreadId` and an *input channel*:
 {{#include ../haskell/GenServer.hs:Server}}
 ```
 
-Here we use the type variable `message` to denote the type of messages
-that a server can receive, which can be different for each kind of
-server.
+Here we use the type variable `msg` to denote the type of messages that a server
+can receive, which can be different for each kind of server.
 
 ```haskell
 {{#include ../haskell/GenServer.hs:Spawn}}
@@ -392,7 +391,7 @@ steps.
    behaviours). Or *unlimited blocking* if the function might block
    forever.
 
-   These functions is the external interface for the server.
+   These functions constitute the external interface for the server.
 
 3. Declare an internal type for the kind of messages (both external
    and internal messages) a server can receive.
