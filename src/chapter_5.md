@@ -559,7 +559,7 @@ actionWithTimeout :: Int -> IO a -> IO (Either Timeout a)
 
 That is, `actionWithTimeout s act` will perform the action `act`
 within a time limit of `s` seconds; it returns an action of type
-`IO(Either Timeout a)` where the special value `Timeout` is returned
+`IO (Either Timeout a)` where the special value `Timeout` is returned
 if `act` did not complete within the time limit:
 
 ```Haskell
