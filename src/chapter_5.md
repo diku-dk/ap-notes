@@ -688,7 +688,7 @@ these features.
 
 Our design will be to launch a separate *worker thread* that computes
 the value. This allows the main server thread to immediately answer
-`poll` requests even through the worker thread is engaged in a
+`poll` requests even though the worker thread is engaged in a
 long-running computation. Once the worker thread has computed the
 desired value, it will be sent to the server thread in a message.
 Further, we need messages for the `poll` and `wait` functions. Our
