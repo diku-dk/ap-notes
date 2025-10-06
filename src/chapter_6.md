@@ -341,12 +341,12 @@ $ cabal test --test-option --quickcheck-tests=10000
 ## Testing stateful systems
 
 The examples above assume that we are testing a pure function where properties
-are involve a relationship between the inputs and outputs of the function.
+involve a relationship between the inputs and outputs of the function.
 Regrettably however, many computer systems are *stateful* - they encapsulate
 some internal data, which is modified in response to commands, and divulges
 information in response to requests. A network service a clean example of a
 stateful system, but even a conventional mutable data structure, such as a
-resisable array, fits the definition.
+resizable array, fits the definition.
 
 Large stateful systems are often complicated and error-prone, and hence it is
 very desirable to be able to test them effectively. It turns out that
