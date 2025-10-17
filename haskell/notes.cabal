@@ -34,3 +34,4 @@ library
         Week5.Counter
         Week6.Properties
         Week6.Stateful
+        Week7.Tricks

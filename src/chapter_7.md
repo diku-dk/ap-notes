@@ -590,3 +590,177 @@ effects into otherwise pure code. If we have control over how the
 computations using the free monad are constructed, we can of course
 ensure that effects occur regularly - we could even imagine a "step"
 effect that serves no purpose except to interrupt computation.
+
+## Tricks with Channels
+
+The channel model we have used in AP is quite simple. Real message passing
+systems often add additional features, such as:
+
+1. *Peeking* at a channel, which determines whether a message is available for
+   reading, but without blocking if there is not.
+
+2. Reading from two (or more) channels at the same time, blocking only if none
+   of them have messages.
+
+3. Broadcasting to multiple channels simultaneously.
+
+There are often performance reasons to implement these as primitives in a
+message passing system, but as we shall see, they can be implemented nicely
+using the primitives we are already familiar with. In particular, the trick that
+may be a bit counterintuitive to most programmers is to use a larger number of
+auxiliary threads.
+
+We will start with the obligatory imports.
+
+```Haskell
+import Control.Concurrent (Chan, forkIO, newChan, readChan, writeChan)
+import Control.Monad (forever)
+import GenServer
+```
+
+### Peeking
+
+Our goal is to define an API that has a type `PeekChan a` that supports an
+operation
+
+```Haskell
+peek :: PeekChan a -> IO (Maybe a)
+```
+
+that will return `Nothing` if the channel has no outstanding messages, and
+otherwise fetch a message as with `receive`. (This is a slight abuse of
+nomenclature, as "peeking" normally implies that we do *not* remove anything.)
+
+The idea is that `PeekChan` will wrap an original `Chan` and provide the
+additional support for peeking. We will implement `PeekChan` as a server that
+maintains a *buffer* of messages that have been sent to the underlying channel.
+The server then supports two operations: appending a message to the queue, or
+reading a message from the queue. An auxiliary thread is responsible for
+repeatedly reading from the original channel and forwarding to the `PeekChan`
+server. The trick is that the blocking behaviour of `receive` is isolated in a
+thread whose responsivity is not important.
+
+This is our definition of `PeekChan`:
+
+```Haskell
+data Peek a
+  = Peek (ReplyChan (Maybe a))
+  | Put a
+
+type PeekChan a = Server (Peek a)
+
+peek :: PeekChan a -> IO (Maybe a)
+peek s = requestReply s Peek
+```
+
+Creating a `PeekChan` from a `Chan` is with the `peekChan` function:
+
+```Haskell
+peekChan :: Chan a -> IO (PeekChan a)
+peekChan c = do
+  s <- spawn $ loop []
+  _ <- forkIO $ forever $ sendTo s . Put =<< receive c
+  pure s
+  where
+    loop buffer sc = do
+      msg <- receive sc
+      case msg of
+        Put x -> loop (buffer ++ [x]) sc
+        Peek rc ->
+          case buffer of
+            [] -> do
+              reply rc Nothing
+              loop buffer sc
+            x : xs -> do
+              reply rc $ Just x
+              loop xs sc
+```
+
+### Reading from multiple channels
+
+Sometimes a thread must read messages from multiple channels in any order.
+Simply calling `receive` is undesirable, because it will block on an empty
+channel even if there are available messages on the other. We can use `peekChan`
+above to implement a loop that repeatedly peeks at the different channels, but
+such *busywaiting* is rather inefficient.
+
+Let us start with a solution for reading from two channels, which can have
+different message types. Our solution is to launch two threads that infinitely
+forward messages onto a third channel.
+
+```Haskell
+joinChans :: Chan a -> Chan b -> IO (Chan (Either a b))
+joinChans chan_a chan_b = do
+  chan_c <- newChan
+  _ <- forkIO $ forever $ send chan_c . Left =<< receive chan_a
+  _ <- forkIO $ forever $ send chan_c . Right =<< receive chan_b
+  pure chan_c
+```
+
+It is not so difficult to generalise this to any number of threads, although in
+that case we require that they all have the same message type.
+
+```Haskell
+joinChansAny :: [Chan a] -> IO (Chan a)
+joinChansAny ins = do
+  outc <- newChan
+  forM_ ins $ \inc ->
+    forkIO $ forever $ send outc =<< receive inc
+  pure outc
+```
+
+In some cases we may care about which channel a message is received from, which
+can be handled by associating each channel with a *tag* that is paired with each
+received message.
+
+```Haskell
+joinChansAnyTagged :: [(tag, Chan a)] -> IO (Chan (tag, a))
+joinChansAnyTagged ins = do
+  outc <- newChan
+  forM_ ins $ \(tag, inc) ->
+    forkIO $ forever $ do
+      msg <- receive inc
+      send outc (tag, msg)
+  pure outc
+```
+
+### Broadcasting
+
+Now let us consider the opposite of reading from multiple channels: *sending* a
+message to many channels. On the face of it, this is much simpler: just do a
+loop (say with `mapM` or `forM`) and `send` to the channels in question. This is
+certainly correct from a semantic perspective, but it is not very concurrent:
+each message is sent serially. If we are sending to a large number of channels,
+which may well be the case for a fine-grained concurrent system, this is
+inefficient.
+
+Our solution is to construct a tree of threads. When a message is send to the
+root, it transmits the message to each of its children, which then transmit it
+on to their children, on to the leaves which send the message to the desired
+channels. For simplicity each node in our tree will have only two children,
+which is likely not particularly efficient because the tree ends up fairly tall,
+but it *is* maximally concurrent.
+
+```Haskell
+broadcast :: [Chan a] -> IO (Chan a)
+broadcast [] = error "broadcast: empty list"
+broadcast [x] = pure x
+broadcast cs = do
+  let (as, bs) = splitAt (length cs `div` 2) cs
+  as_c <- broadcast as
+  bs_c <- broadcast bs
+  c <- newChan
+  _ <- forkIO $ forever $ do
+    msg <- receive c
+    send as_c msg
+    send bs_c msg
+  pure c
+```
+
+Now `broadcast cs` produces a channel `bc` such that whenever a message is sent
+to `bc`, it is send to every channel in `cs`. One caveat one must be aware of is
+that the order in which these messages are sent (yet alone received) is not
+deterministic, as it depends on how the threads are scheduled. It is however
+possible to construct a variant of `broadcast` that blocks until all messages
+have been sent, using a technique similar to the `requestResponse`
+implementation for `GenServer`.
