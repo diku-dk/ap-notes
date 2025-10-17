@@ -614,7 +614,7 @@ We will start with the obligatory imports.
 
 ```Haskell
 import Control.Concurrent (Chan, forkIO, newChan, readChan, writeChan)
-import Control.Monad (forever)
+import Control.Monad (forM_, forever)
 import GenServer
 ```
 
