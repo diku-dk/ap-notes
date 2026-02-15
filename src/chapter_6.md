@@ -342,11 +342,11 @@ $ cabal test --test-option --quickcheck-tests=10000
 
 The examples above assume that we are testing a pure function where properties
 involve a relationship between the inputs and outputs of the function.
-Regrettably however, many computer systems are *stateful* - they encapsulate
-some internal data, which is modified in response to commands, and divulges
-information in response to requests. A network service a clean example of a
-stateful system, but even a conventional mutable data structure, such as a
-resizable array, fits the definition.
+Regrettably however, many computer systems are *stateful*: they encapsulate some
+internal data which is modified in response to commands, and partially revealed
+in response to requests. A network service is a common example of a stateful
+system, but even a conventional mutable data structure, such as a resizable
+array, fits this definition.
 
 Large stateful systems are often complicated and error-prone, and hence it is
 very desirable to be able to test them effectively. It turns out that
@@ -363,7 +363,7 @@ interface. A model is a program that imitates some subset of the behaviour of
 the SUT, and is typically much simpler than the SUT. We then randomly generate
 commands that interact with the SUT and the model, and test that the observable
 behaviour is the same. Essentially, the model is an executable specification
-that we compare against the SUT.
+that we use to validate the behaviour of the SUT.
 
 One very important detail is that there is no requirement that the SUT is
 implemented in the same language as the property-based testing framework (e.g.,
@@ -376,10 +376,12 @@ concerns.
 ### A sample stateful system
 
 The SUT we will test in the following does happen to be implemented in Haskell
-for simplicity. Specifically, we will define a datatype `DynamicArray a` for
+for simplicity, although we stress that this is not required for the approach to
+work. Specifically, our SUT is a datatype `DynamicArray a` that implements
 mutable arrays of elements of type `a` with efficient support for appending
-elements. Since the array is mutable, it will live in `IO`. The implementation
-details of the array are not important, and so will be covered somewhat briefly.
+elements. Since the array is mutable, all operations on it will be in `IO`. The
+implementation details of the array are not important, and so will be covered
+somewhat briefly.
 
 First we will need to import some library functions.
 
@@ -395,18 +397,18 @@ such that there is room to grow at the end. We call the size of this array the
 *capacity*. When the number of elements inserted by the user exceeds the
 capacity, then we bump the capacity by some factor, allocate a new array of that
 size, then copy the old elements to the new array. If we always double the
-capacity, then it can be shown that appending an element can be done in constant
-amortised time.
+capacity, then it can be shown that appending an element can be done in
+amortised constant time.
 
 ```Haskell
 {{#include ../haskell/Week6/Stateful.hs:Stateful_DynamicArray}}
 ```
 
-Because we need to modify both the element count and the capacity, we put them
-in a mutable `IORef`. The underlying array is an `IOArray Int a`, which is a
-mutable (but non-resizable) provided by Haskell. The `Int` type argument is the
-index type, which can be used to represent multidimensional arrays, but we will
-not make use of this.
+Because we need to modify both the number of used elements and the capacity, we
+represent these as mutable `IORef`s. The underlying array is an `IOArray Int a`,
+which is a mutable (but non-resizable) type provided by Haskell. The `Int` type
+argument is the index type, which can be used to represent multidimensional
+arrays, but we will not make use of this.
 
 ~~~admonish note
 
@@ -422,8 +424,8 @@ An `IOArray` is produced by the function `newArray_` of the following type:
 newArray_ :: (Int,Int) -> IO (IOArray Int a)
 ```
 
-The `(Int,Int)` pair is the smallest and largest valid index (these arrays do
-not have to start at zero, although ours do). Initially, all elements of the
+The `(Int,Int)` pair is the smallest and largest valid index. These arrays do
+not have to start at zero, although ours do. Initially, all elements of the
 array will be undefined. Reading an undefined element will cause an IO
 exception.
 
@@ -443,7 +445,8 @@ When indexing an array we check whether the index is in-bounds, returning
 
 Inserting always succeeds and produces no result beyond modifying the array, but
 we have to resize the underlying array if the new element causes the capacity to
-be exceeded.
+be exceeded. This is done by allocating a new array and copying the contents of
+the old one.
 
 ```Haskell
 {{#include ../haskell/Week6/Stateful.hs:Stateful_insert}}
@@ -459,7 +462,7 @@ Overwriting an existing element is quite similar to indexing. We return
 Our final operation allows the deletion of an element anywhere in the array.
 This is a somewhat costly operation, as we have to shift all elements after the
 deleted one left. Further, to avoid using too much memory, if the capacity is
-too large after the deletion, we shrink the array. back down to a smaller size.
+too large after the deletion, we shrink the array back down to a smaller size.
 As before, we return `Nothing` in case the index is out of bounds.
 
 ```Haskell
@@ -482,15 +485,16 @@ about operational matters such as performance.
 A model is described by its internal state and by which *commands* can be sent
 to it, and which *responses* may be produced in return. These commands usually
 resemble the API of the SUT, but perhaps simplified in various ways. Due to the
-simplicity of the system we are testing here, the commands are however fairly
-simple.
+simplicity of the system we are testing here, the commands are however very
+similar to the API of the SUT.
 
 ```Haskell
 {{#include ../haskell/Week6/Stateful.hs:Stateful_Command}}
 ```
 
-We then define functions corresponding to each of the commands. Each function
-returns a new model state, as well as a response. For example, the function
+We then define functions corresponding to executing each of the commands. Each
+function accepts the command parameters and the current model state, and returns
+a new model state, as well as a response. For example, the function
 corresponding to an insertion is defined as follows.
 
 ```Haskell
@@ -567,7 +571,7 @@ Finally, we just need to construct a property that uses `runProgram`. The
 crucial building block is the function `ioProperty`, which allows us to turn an
 arbitrary IO operation into a `Property`:
 
-```
+```Haskell
 ioProperty :: Testable prop => IO prop -> Property
 ```
 
@@ -621,4 +625,4 @@ perform testing of this kind is rather large - in fact, our test harness is more
 lines of code than all of the `DynamicArray` implementation. This is a fair
 objection, but real systems will tend to grow in complexity much faster than
 their models, so this is a technique that scales well as the SUT grows
-complicated, although it is often impractical for testing the simplest systems.
+complicated, although it is sometimes impractical for testing small systems.
