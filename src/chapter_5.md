@@ -65,8 +65,8 @@ A module interface specification is a *contract* between the programmer who
   specification. How I use your implementation is none of your business. Don't
   make me read your code."
 * Implementor to user: "Everything you need to know is in the module
-  specification. How I implement it is none of your business. Don't read my code
-   - I may change it at any time."
+  specification. How I implement it is none of your business. Don't read my
+  code - I may change it at any time."
 
 Note that *user* and *implementor* are roles; they are frequently the same
 person on different days.
