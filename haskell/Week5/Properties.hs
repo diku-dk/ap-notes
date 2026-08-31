@@ -1,4 +1,4 @@
-module Week6.Properties where
+module Week5.Properties where
 
 import Test.QuickCheck
 

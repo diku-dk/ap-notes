@@ -13,10 +13,10 @@ the potential execution paths possible in the system, in order to
 discover race conditions.
 
 In the following we will design a concurrency abstraction that is
-rather similar to the one described in Chapter 5, based on threads,
-channels, and messages. One concession we will make for simplicity is
-that our channels will be *monomorphic*, and capable of sending only a
-single type of messages, for which we pick `String`:
+rather similar to the one described in [Chapter 6](chapter_6.html),
+based on threads, channels, and messages. One concession we will make
+for simplicity is that our channels will be *monomorphic*, and capable
+of sending only a single type of messages, for which we pick `String`:
 
 ```Haskell
 type Msg = String
@@ -205,14 +205,14 @@ Now consider what happens when we run the example:
 
 This type checks because `pipeline` has the polymorphic type `CC chan
 String` where `chan` can be instantiated with any type, and in
-particular it can be instantiate with `Chan Msg` - which is what
+particular it can be instantiated with `Chan Msg` - which is what
 `interpCCIO` requires. In this way we can write generic code that
 delays the concrete choice of channel representation. Let us now
 exploit this to actually write a pure interpreter for `CC`.
 
 ### A Pure Interpreter
 
-The pure interpreter will more complicated than `interpCCIO`, because
+The pure interpreter will be more complicated than `interpCCIO`, because
 we cannot piggyback on the existing Haskell runtime system for
 concurrency. Our approach will essentially be that of a state monad,
 where we maintain the following main bits of state:
@@ -424,10 +424,10 @@ stepThreads = do
   put $ new_state {ccThreads = threads ++ ccThreads new_state}
 ```
 
-Instead of overwriting the list of threads, we not simply prepend to
+Instead of overwriting the list of threads, we now simply prepend to
 it. But now we end up *duplicating* the threads, since the original
 threads from `state` (the ones we pass to `step`) are still present in
-`new_state`. A correct solution requires is to *remove* the threads
+`new_state`. A correct solution requires us to *remove* the threads
 from the state before we step them:
 
 ```Haskell
@@ -463,7 +463,7 @@ system is considered terminated. This is different from
 where forked threads can continue to do arbitrary side effects
 forever.
 
-The final bit of machinery we need is is a bit of boilerplate for
+The final bit of machinery we need is a bit of boilerplate for
 running our state monad with an initial state, and projecting out the
 result we care about:
 
@@ -541,7 +541,7 @@ we do not evaluate the continuation, but merely return it:
 step (Free (CCSend chan_id msg c)) = do
   msgs <- getChan chan_id
   setChan chan_id $ msgs ++ [msg]
-  pure c -- This line was prevously 'step c'.
+  pure c -- This line was previously 'step c'.
 ```
 
 This does not prevent the computation from progressing, since we still
@@ -758,8 +758,8 @@ broadcast cs = do
 ```
 
 Now `broadcast cs` produces a channel `bc` such that whenever a message is sent
-to `bc`, it is send to every channel in `cs`. One caveat one must be aware of is
-that the order in which these messages are sent (yet alone received) is not
+to `bc`, it is sent to every channel in `cs`. One caveat one must be aware of is
+that the order in which these messages are sent (let alone received) is not
 deterministic, as it depends on how the threads are scheduled. It is however
 possible to construct a variant of `broadcast` that blocks until all messages
 have been sent, using a technique similar to the `requestResponse`

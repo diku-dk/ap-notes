@@ -1,4 +1,4 @@
-module Week6.Stateful where
+module Week5.Stateful where
 
 -- ANCHOR: Stateful_Imports
 import Control.Monad (forM_)

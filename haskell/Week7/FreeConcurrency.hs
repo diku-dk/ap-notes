@@ -1,4 +1,4 @@
-module Week6.FreeConcurrency where
+module Week7.FreeConcurrency where
 
 import Control.Concurrent (Chan, forkIO, newChan, readChan, writeChan)
 import Control.Monad (forever)

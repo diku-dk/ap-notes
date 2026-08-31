@@ -1,4 +1,4 @@
-module Week6.InitialAttempt where
+module Week7.InitialAttempt where
 
 import Control.Concurrent (Chan, forkIO, newChan, readChan, writeChan)
 import Week4.Free (Free (..))

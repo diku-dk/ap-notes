@@ -29,9 +29,11 @@ library
         Week4.Exceptions
         Week4.Free
         Week4.FreeAsync
-        Week5.Async
-        Week5.Basics
-        Week5.Counter
-        Week6.Properties
-        Week6.Stateful
+        Week5.Properties
+        Week5.Stateful
+        Week6.Async
+        Week6.Basics
+        Week6.Counter
+        Week7.FreeConcurrency
+        Week7.InitialAttempt
         Week7.Tricks

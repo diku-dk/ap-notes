@@ -1,4 +1,4 @@
-module Week5.Counter
+module Week6.Counter
   ( CounterServer,
     newCounter,
     getValue,
