@@ -12,11 +12,21 @@ import Test.QuickCheck
   ( Arbitrary (..),
     Gen,
     Property,
+    checkCoverage,
+    chooseInt,
+    counterexample,
+    cover,
+    forAllShrink,
+    frequency,
     ioProperty,
     listOf,
     oneof,
+    property,
     quickCheck,
     sample,
+    shrinkList,
+    sized,
+    tabulate,
   )
 
 -- ANCHOR_END: Stateful_QuickCheckImports
@@ -251,3 +261,181 @@ prop_array prog = ioProperty $ do
 
 test_prop_array :: IO ()
 test_prop_array = quickCheck prop_array
+
+-------------------------------------------------------------------------
+-- Better counterexamples.
+-------------------------------------------------------------------------
+
+-- ANCHOR: Stateful_checkProgram
+checkProgram ::
+  (Eq a, Show a) =>
+  DynamicArray a ->
+  Model a ->
+  Program a ->
+  IO Property
+checkProgram c0 m0 (Program cmds0) = go m0 cmds0
+  where
+    go _m [] = pure $ property True
+    go m (cmd : cmds) = do
+      sut_resp <- exec c0 cmd
+      let (m', model_resp) = step m cmd
+      if sut_resp == model_resp
+        then go m' cmds
+        else
+          pure $
+            counterexample
+              ( unlines
+                  [ "Diverged on command: " ++ show cmd,
+                    "In model state:      " ++ show m,
+                    "SUT response:        " ++ show sut_resp,
+                    "Model response:      " ++ show model_resp
+                  ]
+              )
+              False
+
+-- ANCHOR_END: Stateful_checkProgram
+
+-- ANCHOR: Stateful_prop_array2
+prop_array' :: Program Int -> Property
+prop_array' prog = ioProperty $ do
+  c <- newDynamicArray
+  checkProgram c initModel prog
+
+-- ANCHOR_END: Stateful_prop_array2
+
+-------------------------------------------------------------------------
+-- Generating programs that make sense.
+-------------------------------------------------------------------------
+
+-- ANCHOR: Stateful_genCommand
+genCommand :: (Arbitrary a) => Model a -> Gen (Command a)
+genCommand (Model xs) = frequency $ unconstrained ++ inBounds
+  where
+    unconstrained =
+      [ (insertWeight, Insert <$> arbitrary),
+        (1, Index <$> arbitrary),
+        (1, Write <$> arbitrary <*> arbitrary),
+        (1, Delete <$> arbitrary)
+      ]
+    inBounds
+      | null xs = []
+      | otherwise =
+          [ (3, Index <$> validIndex),
+            (3, Write <$> validIndex <*> arbitrary),
+            (3, Delete <$> validIndex)
+          ]
+    validIndex = chooseInt (0, length xs - 1)
+    insertWeight = max 2 (30 - 2 * length xs)
+
+-- ANCHOR_END: Stateful_genCommand
+
+-- ANCHOR: Stateful_genProgram
+genProgram :: (Arbitrary a) => Gen (Program a)
+genProgram = sized $ \n -> do
+  k <- chooseInt (0, n)
+  Program <$> go initModel k
+  where
+    go _ 0 = pure []
+    go m k = do
+      cmd <- genCommand m
+      let (m', _) = step m cmd
+      (cmd :) <$> go m' (k - 1)
+
+-- ANCHOR_END: Stateful_genProgram
+
+-- ANCHOR: Stateful_prop_array3
+prop_array'' :: Property
+prop_array'' =
+  forAllShrink (genProgram :: Gen (Program Int)) shrink $ \prog ->
+    ioProperty $ do
+      c <- newDynamicArray
+      checkProgram c initModel prog
+
+-- ANCHOR_END: Stateful_prop_array3
+
+-------------------------------------------------------------------------
+-- Preconditions, and shrinking in their presence.
+-------------------------------------------------------------------------
+
+-- ANCHOR: Stateful_precondition
+precondition :: Model a -> Command a -> Bool
+precondition (Model xs) cmd = case cmd of
+  Insert _ -> True
+  Index i -> ok i
+  Write i _ -> ok i
+  Delete i -> ok i
+  where
+    ok i = i >= 0 && i < length xs
+
+validProgram :: Program a -> Bool
+validProgram (Program cmds0) = go initModel cmds0
+  where
+    go _ [] = True
+    go m (cmd : cmds) =
+      precondition m cmd && go (fst (step m cmd)) cmds
+
+shrinkProgram :: Program a -> [Program a]
+shrinkProgram (Program cmds) =
+  filter validProgram $ map Program $ shrinkList (const []) cmds
+
+-- ANCHOR_END: Stateful_precondition
+
+-------------------------------------------------------------------------
+-- Partitioning the state space.
+-------------------------------------------------------------------------
+
+-- ANCHOR: Stateful_trace
+modelTrace :: Program a -> [(Model a, Command a, Response a)]
+modelTrace (Program cmds0) = go initModel cmds0
+  where
+    go _ [] = []
+    go m (cmd : cmds) =
+      let (m', resp) = step m cmd
+       in (m, cmd, resp) : go m' cmds
+
+maxElems :: Program a -> Int
+maxElems prog = maximum $ 0 : [length xs | (Model xs, _, _) <- modelTrace prog]
+
+deletedWhenLarge :: Program a -> Bool
+deletedWhenLarge prog =
+  or [length xs > 10 | (Model xs, Delete _, _) <- modelTrace prog]
+
+anyRejected :: (Eq a) => Program a -> Bool
+anyRejected prog = or [resp == Failure | (_, _, resp) <- modelTrace prog]
+
+-- ANCHOR_END: Stateful_trace
+
+-- ANCHOR: Stateful_coverage
+programCoverage :: Program Int -> Property -> Property
+programCoverage prog =
+  checkCoverage
+    . tabulate "maximum number of elements" [bucket (maxElems prog)]
+    . cover 30 (maxElems prog > 10) "grows past initial capacity"
+    . cover 10 (deletedWhenLarge prog) "deletes while large"
+    . cover 30 (anyRejected prog) "some command out of bounds"
+  where
+    bucket n
+      | n == 0 = "0"
+      | n <= 10 = "1-10"
+      | n <= 20 = "11-20"
+      | otherwise = ">20"
+
+-- ANCHOR_END: Stateful_coverage
+
+-- ANCHOR: Stateful_prop_coverage
+prop_arrayNaiveCoverage :: Program Int -> Property
+prop_arrayNaiveCoverage prog =
+  programCoverage prog $
+    ioProperty $ do
+      c <- newDynamicArray
+      checkProgram c initModel prog
+
+prop_arrayCoverage :: Property
+prop_arrayCoverage =
+  forAllShrink (genProgram :: Gen (Program Int)) shrink $ \prog ->
+    programCoverage prog $
+      ioProperty $ do
+        c <- newDynamicArray
+        checkProgram c initModel prog
+
+-- ANCHOR_END: Stateful_prop_coverage
