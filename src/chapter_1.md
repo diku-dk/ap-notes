@@ -365,7 +365,7 @@ This interface defines two *methods*, `(==)` and `(/=)`, of the specified type,
 which all type classes must implement. The enclosing parentheses denote that
 these are actually the infix operators `==` and `/=`.
 
-We can write polymorhic functions that require that the polymorphic types
+We can write polymorphic functions that require that the polymorphic types
 implement a type class. This is done by adding a type class constraint to the
 type of the function. For example:
 
