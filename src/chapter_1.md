@@ -574,6 +574,106 @@ True
 False
 ```
 
+### Monoids
+
+*Monoids* are algebraic structures comprising a set with an associated binary
+operation with an identity element. If there is no identity element, we call
+this structure a *semigroup*. In Haskell, we can model these structures using
+type classes as follows.
+
+```Haskell
+class Semigroup a where
+  (<>) :: a -> a -> a
+
+class Semigroup a => Monoid a where
+  mempty :: a
+```
+
+We will generally deal only with monoids (which are also semigroups), although
+there are some cases where it is useful to have only semigroups. Whenever we
+talk about some type being a monoid, we are always concerned with its semigroup
+instance as well.
+
+Monoids generalise the notion of "combining two things", and turn out to be a
+surprisingly general and useful tool for structuring programs, as it turns out
+many operations can be generalised as "extracting things from a structure" and
+then "combining those things".
+
+A valid instance of `Monoid` and `Semigroup` must satisfy certain laws:
+
+* **Identity**: `a <> mempty == mempty <> a == a`.
+
+* **Associativity**: `(a <> b) <> c == a <> (b <> c)`
+
+Monoids are an example of a monoid, with the following instance:
+
+```Haskell
+instance Semigroup [a] where
+  xs <> ys = xs ++ ys
+
+instance Monoid [a] where
+  mempty = []
+```
+
+Haskell already defines these classes for us, as well as law-abiding predefined
+instances for all builtin types. However, in some cases multiple instances are
+possible. For example, we could define a monoid instance `Int` where the
+operation is addition and the identity element is zero, but we could also define
+the operation as multiplication and the identity element as unit. Since both are
+valid, none are defined. If we desire a monoid instance for numbers, we can
+always define our own type that wraps a number:
+
+```Haskell
+data Sum = Sum Int
+
+instance Semigroup Sum where
+  Sum x <> Sum y = Sum (x+y)
+
+instance Monoid Sum where
+  mempty = Sum 0
+```
+
+#### `foldMap`
+
+One of the prominent abstractions in which monoids appear is the `foldMap`
+function, which has the following type:
+
+```Haskell
+foldMap :: (Foldable t, Monoid m) => (a -> m) -> t a -> m
+```
+
+Given any `Foldable` structure `x`, `foldMap f x` first uses `f` to transform
+every element of the structure to an `m`, then uses the monoidal operator `<>`
+to combine them to a final result. For example, given our `Sum` instance above,
+we could sum a list like thus:
+
+```Haskell
+> foldMap Sum [1,2,3,4]
+Sum 10
+```
+
+This nicely decomposes the notion of "how to fold across a structure" from "how
+to combine intermediate results". The `foldMap` function itself can be expressed
+in terms of `foldr`:
+
+```Haskell
+foldMap f xs =
+  foldr (\x acc -> f x <> acc) mempty xs
+```
+
+And conversely, `foldr` can be expressed in terms of `foldMap`, as follows:
+
+```Haskell
+foldMap f xs = foldr (\x acc -> f x <> acc) mempty xs
+```
+
+In fact, `foldMap` is not a normal function, but actually a method of the
+`Foldable` class, and an instance can be defined in terms of *either* `foldMap`
+or `foldr`. There is a somewhat complicated law for `Foldable` that specifies
+their equivalence, but in practice you only need to be concerned with it if you
+manually specify *both* `foldMap` and `foldr`, which you would generally only do
+for a type that allows efficient specialised definitions.
+
 ## Phantom Types
 
 In this section we will briefly look at a programming technique that uses types
