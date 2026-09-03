@@ -153,14 +153,14 @@ is `True` when the test succeeds. This is how we can write a test that fails:
 
 ```Haskell
 failingTest :: TestTree
-failingTest = TestCase "should not work" $ assertBool "1 is not 2" $ 1==2
+failingTest = testCase "should not work" $ assertBool "1 is not 2" $ 1==2
 ```
 
 And here is one that succeeds:
 
 ```Haskell
 successfulTest :: TestTree
-successfulTest = TestCase "should work" $ assertBool "1 is 1" $ 1==1
+successfulTest = testCase "should work" $ assertBool "1 is 1" $ 1==1
 ```
 
 We can combine multiple `TestTree`s with `testGroup`:
