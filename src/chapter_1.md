@@ -661,11 +661,37 @@ foldMap f xs =
   foldr (\x acc -> f x <> acc) mempty xs
 ```
 
-And conversely, `foldr` can be expressed in terms of `foldMap`, as follows:
+And conversely, `foldr` can be expressed in terms of `foldMap`. The encoding is
+slightly intricate, and depends on defining a type `Endo` representing functions
+with the same domain and codomain ("endomorphisms"), which are monoids under
+composition:
 
 ```Haskell
-foldMap f xs = foldr (\x acc -> f x <> acc) mempty xs
+data Endo a = Endo (a -> a)
+
+appEndo :: Endo a -> a -> a
+appEndo (Endo f) = f
+
+instance Semigroup (Endo a) where
+  Endo f <> Endo g = Endo (f <> g)
+
+instance Monoid (Endo a) where
+  mempty = Endo id
+
 ```
+
+We can now define a `foldr` as a `foldMap` on the `Endo` monoid.
+
+```Haskell
+foldr op acc xs =
+  appEndo (foldMap (Endo . op) xs) acc
+```
+
+The trick is to partially apply each operator `op :: a -> b -> b` to each
+element of type `a`, which can be seen as giving us a collection of `b -> b`
+"accumulator transformer" functions, which we wrap in `Endo` surely to use its
+`Monoid` instances. We then simply have to apply the final `Endo` to the initial
+accumulator.
 
 In fact, `foldMap` is not a normal function, but actually a method of the
 `Foldable` class, and an instance can be defined in terms of *either* `foldMap`
