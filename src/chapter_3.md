@@ -873,9 +873,9 @@ sugar, our parsers are just recursive Haskell functions. Looking at
 invoke `pBExp`. If we look at the EBNF grammar for Boolean
 expressions, we also see that some of the production rules for `BExp`
 start with `BExp`. In the nomenclature of parser theory, this is
-called *left recursion*. The style of Parser combinator library we are
+called *left recursion*. The style of parser combinator library we are
 studying here is equivalent to so-called *recursive descent parsers
-with arbitrary lookahead*, which are known to not support left
+with arbitrary lookahead* (or *LL(k)*), which are known to not support left
 recursion. The solution to this problem is to rewrite the grammar to
 eliminate left-recursion. If you need a refresher on how to do this,
 see [Grammars and parsing with Haskell using parser
