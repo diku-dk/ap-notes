@@ -536,7 +536,7 @@ itself.
 When lexing the string `"123"`, we see it as a single token `123`
 rather than three tokens `1`, `2`, `3`? The reason for this is that
 most grammars follow the *longest match* (or *maximum munch*) rule:
-each tokens extend as far as possible. This principle has actually
+each token extend as far as possible. This principle has actually
 been baked into the definition of the `many` combinator above, as it
 tries the recursive case before the terminal case. If we instead
 defined `many` like this:
