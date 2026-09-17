@@ -881,9 +881,10 @@ eliminate left-recursion. If you need a refresher on how to do this,
 see [Grammars and parsing with Haskell using parser
 combinators](https://github.com/diku-dk/ap-e2024-pub/blob/main/week3/parsernotes.pdf),
 but the idea is to split the non-recursive cases into a separate
-nonterminal (often called `Atom`) Transforming the grammar (note that
-we do not modify the Haskell AST definition) provides us with the
-following:
+nonterminal (often called `Atom`).
+
+Transforming the grammar (note that we do not modify the Haskell AST definition)
+provides us with the following:
 
 ```
 var ::= ? one or more alphabetic characters ? ;
