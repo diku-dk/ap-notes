@@ -49,7 +49,7 @@ spawn :: (Chan a -> IO ()) -> IO (Server a)
 spawn serverLoop = do
   input <- newChan
   tid <- forkIO $ serverLoop input
-  return $ Server tid input
+  pure $ Server tid input
 -- ANCHOR_END: Spawn
 
 -- ANCHOR: ReplyChan

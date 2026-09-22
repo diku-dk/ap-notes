@@ -60,17 +60,17 @@ divider = do
         then do
           logMsg "Cannot divide by zero"
           waitForDivisor
-        else return y
+        else pure y
 
 -- ANCHOR_END: processes
 
 -- ANCHOR: stepUntilWait
 stepUntilWait :: EventM a -> IO (EventM a)
-stepUntilWait (Pure x) = return (Pure x)
+stepUntilWait (Pure x) = pure (Pure x)
 stepUntilWait (Free (LogMsg s c)) = do
   putStrLn s
   stepUntilWait c
-stepUntilWait w@(Free (WaitFor _ _)) = return w
+stepUntilWait w@(Free (WaitFor _ _)) = pure w
 
 -- ANCHOR_END: stepUntilWait
 
@@ -78,7 +78,7 @@ stepUntilWait w@(Free (WaitFor _ _)) = return w
 deliver :: Event -> EventM () -> IO (EventM ())
 deliver (name, val) (Free (WaitFor wanted c))
   | wanted == name = stepUntilWait (c val)
-deliver _ p = return p
+deliver _ p = pure p
 
 -- ANCHOR_END: deliver
 
@@ -97,7 +97,7 @@ interactivelyRunEventM :: [EventM ()] -> IO ()
 interactivelyRunEventM ps = do
   ps' <- mapM stepUntilWait ps
   case filter running ps' of
-    [] -> return ()
+    [] -> pure ()
     qs -> do
       event <- readLn
       qs' <- mapM (deliver event) qs

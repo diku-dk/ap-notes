@@ -29,7 +29,7 @@ modify f = get >>= (put . f)
 
 -- ANCHOR: tick
 tick :: (StateMonad m Int) => m Int
-tick = do n <- get; put (n + 1); return n
+tick = do n <- get; put (n + 1); pure n
 
 -- ANCHOR_END: tick
 
@@ -41,8 +41,8 @@ pop :: (StateMonad m [a]) => m (Maybe a)
 pop = do
   xs <- get
   case xs of
-    [] -> return Nothing
-    (y : ys) -> do put ys; return (Just y)
+    [] -> pure Nothing
+    (y : ys) -> do put ys; pure (Just y)
 
 stackExample :: (StateMonad m [Int]) => m (Maybe Int)
 stackExample = do
@@ -50,12 +50,12 @@ stackExample = do
   push 5
   a <- pop
   b <- pop
-  return (addMaybe a b)
+  pure (addMaybe a b)
   where
     addMaybe mx my = do
       x <- mx
       y <- my
-      return (x + y)
+      pure (x + y)
 
 -- ANCHOR_END: stack
 
@@ -84,7 +84,7 @@ instance Applicative (FState s) where
   mf <*> ma = mf >>= (\f -> fmap f ma)
 
 instance Functor (FState s) where
-  fmap f m = m >>= (return . f)
+  fmap f m = m >>= (pure . f)
 
 instance StateMonad (FState s) s where
   get = FState (\s -> (s, s))
@@ -115,11 +115,11 @@ instance Monad (IState s) where
       )
 
 instance Applicative (IState s) where
-  pure a = IState (\_ -> return a)
+  pure a = IState (\_ -> pure a)
   mf <*> ma = mf >>= (\f -> fmap f ma)
 
 instance Functor (IState s) where
-  fmap f m = m >>= (return . f)
+  fmap f m = m >>= (pure . f)
 
 instance StateMonad (IState s) s where
   get = IState readIORef
@@ -135,7 +135,7 @@ instance Monad Counting where
     Counting (\n -> let (a, n') = g n in runCounting (f a) n')
 
 instance Functor Counting where
-  fmap f m = m >>= (return . f)
+  fmap f m = m >>= (pure . f)
 
 instance Applicative Counting where
   pure a = Counting (\n -> (a, n))
@@ -168,7 +168,7 @@ data StateObj s = StateObj
 newStateObj :: s -> IO (StateObj s)
 newStateObj s0 = do
   ref <- newIORef s0
-  return (StateObj {objGet = readIORef ref, objPut = writeIORef ref})
+  pure (StateObj {objGet = readIORef ref, objPut = writeIORef ref})
 
 -- ANCHOR_END: StateObj
 
@@ -192,11 +192,11 @@ instance Monad (OState s) where
       )
 
 instance Functor (OState s) where
-  fmap f m = m >>= (\x -> return (f x))
+  fmap f m = m >>= (\x -> pure (f x))
 
 instance Applicative (OState s) where
-  -- The object is discarded: return performs no side effects.
-  pure a = OState (\_ -> return a)
+  -- The object is discarded: pure performs no side effects.
+  pure a = OState (\_ -> pure a)
   mf <*> ma = mf >>= (\f -> fmap f ma)
 
 instance StateMonad (OState s) s where
@@ -212,7 +212,7 @@ tracing name o =
     { objGet = do
         s <- objGet o
         putStrLn (name ++ ": get -> " ++ show s)
-        return s,
+        pure s,
       objPut = \s -> do
         putStrLn (name ++ ": put " ++ show s)
         objPut o s
@@ -244,10 +244,9 @@ instance Monad (FSM s) where
   Putk s m >>= f = Putk s (m >>= f)
 
 instance Functor (FSM s) where
-  fmap f m = m >>= (return . f)
+  fmap f m = m >>= (pure . f)
 
 instance Applicative (FSM s) where
-  -- pure is return; Haskell requires the definition to live here.
   pure = Return
   mf <*> ma = mf >>= (\f -> fmap f ma)
 
@@ -291,7 +290,7 @@ interpret ::
   (forall x. e x -> m x) ->
   Free e a ->
   m a
-interpret _ (Pure x) = return x
+interpret _ (Pure x) = pure x
 interpret h (Free g) = join (fmap (interpret h) (h g))
 
 -- ANCHOR_END: interpret
@@ -299,7 +298,7 @@ interpret h (Free g) = join (fmap (interpret h) (h g))
 -- ANCHOR: stateOps
 stateOps :: (StateMonad m s) => StateOp s x -> m x
 stateOps (StateGet k) = fmap k get
-stateOps (StatePut s x) = put s >> return x
+stateOps (StatePut s x) = put s >> pure x
 
 runFreeState :: (StateMonad m s) => FreeState s a -> m a
 runFreeState = interpret stateOps

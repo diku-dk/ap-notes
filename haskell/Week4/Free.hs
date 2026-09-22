@@ -160,8 +160,8 @@ fibLog s = Free (FibLog s (Pure ()))
 
 -- ANCHOR: fib
 fib :: Int -> FibM Int
-fib 0 = return 1
-fib 1 = return 1
+fib 0 = pure 1
+fib 1 = pure 1
 fib n =
   fibMemo
     n
@@ -169,7 +169,7 @@ fib n =
         fibLog ("fib(" ++ show n ++ ")")
         x <- fib (n - 1)
         y <- fib (n - 2)
-        return (x + y)
+        pure (x + y)
     )
 
 -- ANCHOR_END: fib
@@ -184,7 +184,7 @@ pureFibM (Free (FibMemo _ fn c)) = pureFibM (c (pureFibM fn))
 
 -- ANCHOR: ioFibM
 ioFibM :: FibM a -> IO a
-ioFibM (Pure x) = return x
+ioFibM (Pure x) = pure x
 ioFibM (Free (FibLog s c)) = do
   putStrLn s
   ioFibM c
