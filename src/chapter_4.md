@@ -1873,13 +1873,10 @@ the end.
 {{#include ../haskell/Week4/Free.hs:memoFibM}}
 ```
 
-In the `FibMemo` case, we check whether a result for `n` is already
-known, and if so, we return it. Otherwise we compute it by executing
-`fn`. The local signature on `run` is needed rather than optional: `run` is
-used both at the result type of the whole computation and at `Int`, and a
-local binding is not generalised in a module that enables `GADTs`. Note that
-`run` could also be implemented using the `State` monad, as the way we handle
-the cache is identical to how `State` handles state.
+In the `FibMemo` case, we check whether a result for `n` is already known, and
+if so, we return it. Otherwise we compute it by executing `fn`. Note that `run`
+could also be implemented using the `State` monad, as the way we handle the
+cache is identical to how `State` handles state.
 
 Now even large applications of `fib` finish almost instantaneously, as
 memoisation transforms the exponential number of recursive calls to a linear
