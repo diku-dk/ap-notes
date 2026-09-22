@@ -10,7 +10,8 @@ followed whenever making new contributions. Since the purpose of the code is to
 explain concepts, rather than to write real software, it has some oddities
 compared to "real" Haskell code. The ideal (which we may or may not reach) is
 that we minimise the number and power of (language) concepts we introduce, but
-we try to explain them in depth.
+we try to explain them in depth. Some of the principles conflict with each
+other, so we have to use our judgment when they conflict.
 
 0. *Every line is teaching material*. We should respect the students' time, and
    not have anything that is not useful to them.
@@ -50,3 +51,14 @@ we try to explain them in depth.
 
    Instead of using some advanced library feature, it may be better to use just
    the basic library features and show how complex stuff can be built on top.
+
+4. Accept Haskell details that we may not think are didactically optimal, but
+   are inescapable as long as we use Haskell. An example of the
+   `Functor`/`Applicative`/`Monad` hierarchy, and how the various monadic
+   operations (which are our main interest) are distributed among them. Another
+   is the somewhat odd numeric hierarchy. We do not go "against the grain" of
+   the language as it just creates unnecessary friction. This also means we say
+   `pure` instead of `return`. In practice we just do not emphasize
+   `Applicative` that much, and once we are done introducing it, we use
+   boilerplate definitions for its instances based on the "real work" done for
+   `Functor` and `Monad` (chapter 2 covers this).
