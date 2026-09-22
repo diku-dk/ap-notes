@@ -1713,7 +1713,7 @@ ioFibM (Free (FibLog s x)) = do
 Example use:
 
 ```
-> ioFibM (fib 5)
+> ioFibM $ fib 5
 fib(5)
 fib(4)
 fib(3)
@@ -1739,7 +1739,7 @@ pureFibM (Free (FibLog _ c)) = pureFibM c
 ```
 
 ```
-> pureFibM (fib 5)
+> pureFibM $ fib 5
 8
 ```
 
@@ -1755,7 +1755,7 @@ logFibM (Free (FibLog s c)) =
 ```
 
 ```
-> logFibM (fib 5)
+> logFibM $ fib 5
 (8,["fib(5)","fib(4)","fib(3)","fib(2)","fib(2)","fib(3)","fib(2)"])
 ```
 
@@ -1785,7 +1785,7 @@ Above we saw how we could interpret the same effectful function
 us now add another effect. One problem with the recursive Fibonacci
 function is that it is very slow, as it redundantly recomputes the
 same recursive invocations over and over again. If you execute
-`pureFibM (fib 25)` at the `ghci` prompt, you will likely wait several
+`pureFibM $ fib 25` at the `ghci` prompt, you will likely wait several
 seconds before you get a response.
 
 One way to improve the performance of recursive computations with many
@@ -1883,7 +1883,7 @@ memoisation transforms the exponential number of recursive calls to a linear
 number of recursive calls:
 
 ```
-> memoFibM (fib 1000)
+> memoFibM $ fib 1000
 9079565065540428013
 ```
 

@@ -14,8 +14,8 @@ data Free e a
 
 -- ANCHOR: Functor_Free
 instance (Functor e) => Functor (Free e) where
-  fmap f (Pure x) = Pure (f x)
-  fmap f (Free g) = Free (fmap (fmap f) g)
+  fmap f (Pure x) = Pure $ f x
+  fmap f (Free g) = Free $ fmap (fmap f) g
 
 -- ANCHOR_END: Functor_Free
 
@@ -30,7 +30,7 @@ instance (Functor e) => Applicative (Free e) where
 -- ANCHOR: Monad_Free
 instance (Functor e) => Monad (Free e) where
   Pure x >>= f = f x
-  Free g >>= f = Free (fmap (>>= f) g)
+  Free g >>= f = Free $ fmap (>>= f) g
 
 -- ANCHOR_END: Monad_Free
 
@@ -41,7 +41,7 @@ data ReadOp r a = ReadOp (r -> a)
 
 -- ANCHOR: Functor_ReadOp
 instance Functor (ReadOp r) where
-  fmap f (ReadOp g) = ReadOp (f . g)
+  fmap f (ReadOp g) = ReadOp $ f . g
 
 -- ANCHOR_END: Functor_ReadOp
 
@@ -63,7 +63,7 @@ runReader r (Free (ReadOp g)) = runReader r (g r)
 
 -- ANCHOR: ask
 ask :: Reader r r
-ask = Free (ReadOp Pure)
+ask = Free $ ReadOp Pure
 
 -- ANCHOR_END: ask
 
@@ -76,8 +76,8 @@ data StateOp s r
 
 -- ANCHOR: Functor_StateOp
 instance Functor (StateOp s) where
-  fmap h (StateGet k) = StateGet (h . k)
-  fmap h (StatePut s a) = StatePut s (h a)
+  fmap h (StateGet k) = StateGet $ h . k
+  fmap h (StatePut s a) = StatePut s $ h a
 
 -- ANCHOR_END: Functor_StateOp
 
@@ -96,10 +96,10 @@ runState _ (Free (StatePut s' m)) = runState s' m
 
 -- ANCHOR: put_get
 put :: s -> FreeState s ()
-put s = Free (StatePut s (Pure ()))
+put s = Free $ StatePut s $ Pure ()
 
 get :: FreeState s s
-get = Free (StateGet Pure)
+get = Free $ StateGet Pure
 
 -- ANCHOR_END: put_get
 
@@ -129,10 +129,10 @@ runError (Free (ErrorCatch m h c)) =
 
 -- ANCHOR: throw_catch
 throw :: e -> ErrorM e a
-throw e = Free (ErrorThrow e)
+throw e = Free $ ErrorThrow e
 
 catch :: ErrorM e a -> (e -> ErrorM e a) -> ErrorM e a
-catch m h = Free (ErrorCatch m h Pure)
+catch m h = Free $ ErrorCatch m h Pure
 
 -- ANCHOR_END: throw_catch
 
@@ -144,17 +144,17 @@ data FibOp a
 type FibM a = Free FibOp a
 
 instance Functor FibOp where
-  fmap f (FibLog s c) = FibLog s (f c)
-  fmap f (FibMemo n m c) = FibMemo n m (f . c)
+  fmap f (FibLog s c) = FibLog s $ f c
+  fmap f (FibMemo n m c) = FibMemo n m $ f . c
 
 -- ANCHOR_END: FibOp
 
 -- ANCHOR: fibLog_fibMemo
 fibMemo :: Int -> FibM Int -> FibM Int
-fibMemo n m = Free (FibMemo n m Pure)
+fibMemo n m = Free $ FibMemo n m Pure
 
 fibLog :: String -> FibM ()
-fibLog s = Free (FibLog s (Pure ()))
+fibLog s = Free $ FibLog s $ Pure ()
 
 -- ANCHOR_END: fibLog_fibMemo
 
@@ -162,15 +162,11 @@ fibLog s = Free (FibLog s (Pure ()))
 fib :: Int -> FibM Int
 fib 0 = pure 1
 fib 1 = pure 1
-fib n =
-  fibMemo
-    n
-    ( do
-        fibLog ("fib(" ++ show n ++ ")")
-        x <- fib (n - 1)
-        y <- fib (n - 2)
-        pure (x + y)
-    )
+fib n = fibMemo n $ do
+  fibLog $ "fib(" ++ show n ++ ")"
+  x <- fib (n - 1)
+  y <- fib (n - 2)
+  pure $ x + y
 
 -- ANCHOR_END: fib
 
@@ -178,7 +174,7 @@ fib n =
 pureFibM :: FibM a -> a
 pureFibM (Pure x) = x
 pureFibM (Free (FibLog _ c)) = pureFibM c
-pureFibM (Free (FibMemo _ fn c)) = pureFibM (c (pureFibM fn))
+pureFibM (Free (FibMemo _ fn c)) = pureFibM $ c $ pureFibM fn
 
 -- ANCHOR_END: pureFibM
 
@@ -190,7 +186,7 @@ ioFibM (Free (FibLog s c)) = do
   ioFibM c
 ioFibM (Free (FibMemo _ fn c)) = do
   x <- ioFibM fn
-  ioFibM (c x)
+  ioFibM $ c x
 
 -- ANCHOR_END: ioFibM
 
@@ -202,21 +198,21 @@ logFibM (Free (FibLog s c)) =
    in (x, s : msgs)
 logFibM (Free (FibMemo _ fn c)) =
   let (x, msgs) = logFibM fn
-      (y, msgs') = logFibM (c x)
+      (y, msgs') = logFibM $ c x
    in (y, msgs ++ msgs')
 
 -- ANCHOR_END: logFibM
 
 -- ANCHOR: memoFibM
 memoFibM :: FibM a -> a
-memoFibM m = fst (run [] m)
+memoFibM m = fst $ run [] m
   where
     run :: [(Int, Int)] -> FibM b -> (b, [(Int, Int)])
     run cache (Pure x) = (x, cache)
     run cache (Free (FibLog _ c)) = run cache c
     run cache (Free (FibMemo n fn c)) =
       case lookup n cache of
-        Just x -> run cache (c x)
+        Just x -> run cache $ c x
         Nothing ->
           let (x, cache') = run cache fn
            in run ((n, x) : cache') (c x)

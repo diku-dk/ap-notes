@@ -20,8 +20,8 @@ data EventOp a
   | LogMsg String a
 
 instance Functor EventOp where
-  fmap f (WaitFor s c) = WaitFor s (f . c)
-  fmap f (LogMsg s c)  = LogMsg s (f c)
+  fmap f (WaitFor s c) = WaitFor s $ f . c
+  fmap f (LogMsg s c)  = LogMsg s $ f c
 
 type EventM a = Free EventOp a
 
@@ -32,7 +32,7 @@ waitFor :: EventName -> EventM EventValue
 waitFor s = Free (WaitFor s Pure)
 
 logMsg :: String -> EventM ()
-logMsg s = Free (LogMsg s (Pure ()))
+logMsg s = Free $ LogMsg s $ Pure ()
 
 -- ANCHOR_END: waitFor_logMsg
 
@@ -41,18 +41,18 @@ adder, multiplier :: EventM ()
 adder = do
   logMsg "starting adder"
   x <- waitFor "add"; y <- waitFor "add"
-  logMsg (unwords [show x, "+", show y, "=", show (x+y)])
+  logMsg $ unwords [show x, "+", show y, "=", show $ x+y]
 multiplier = do
   logMsg "starting multiplier"
   x <- waitFor "mul"; y <- waitFor "mul"
-  logMsg (unwords [show x, "*", show y, "=", show (x*y)])
+  logMsg $ unwords [show x, "*", show y, "=", show $ x*y]
 
 divider :: EventM ()
 divider = do
   logMsg "starting divider"
   x <- waitFor "div"
   y <- waitForDivisor
-  logMsg (unwords [show x, "/", show y, "=", show (div x y)])
+  logMsg $ unwords [show x, "/", show y, "=", show $ div x y]
   where
     waitForDivisor = do
       y <- waitFor "div"
@@ -66,7 +66,7 @@ divider = do
 
 -- ANCHOR: stepUntilWait
 stepUntilWait :: EventM a -> IO (EventM a)
-stepUntilWait (Pure x) = pure (Pure x)
+stepUntilWait (Pure x) = pure $ Pure x
 stepUntilWait (Free (LogMsg s c)) = do
   putStrLn s
   stepUntilWait c
