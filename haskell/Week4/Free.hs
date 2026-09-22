@@ -135,40 +135,6 @@ catch m h = Free (ErrorCatch m h Pure)
 
 -- ANCHOR_END: throw_catch
 
--- ANCHOR: Error
-data ErrorOp e a =
-  ErrorThrow e
-  | forall x . ErrorCatch (ErrorM e x) (e -> ErrorM e x) (x -> a)
-
-instance Functor (ErrorOp e) where
-  fmap _ (ErrorThrow e) = ErrorThrow e
-  fmap f (ErrorCatch m h c) = ErrorCatch m h (f . c)
-
-type ErrorM e a = Free (ErrorOp e) a
-
--- ANCHOR_END: Error
-
--- ANCHOR: runError
-runError :: ErrorM e a -> Either e a
-runError (Pure x) = Right x
-runError (Free (ErrorThrow e)) = Left e
-runError (Free (ErrorCatch m h c)) =
-  case runError m of
-    Right x -> runError (c x)
-    Left err -> runError (h err >>= c)
-
--- ANCHOR_END: runError
-
--- ANCHOR: throw_catch
-throw :: e -> ErrorM e a
-throw e = Free (ErrorThrow e)
-
-catch :: ErrorM e a -> (e -> ErrorM e a) -> ErrorM e a
-catch m h = Free (ErrorCatch m h Pure)
-
--- ANCHOR_END: throw_catch
-
-
 -- ANCHOR: FibOp
 data FibOp a = FibLog String a
              | FibMemo Int (FibM Int) (Int -> a)
