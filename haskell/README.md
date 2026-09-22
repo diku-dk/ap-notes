@@ -14,13 +14,20 @@ we try to explain them in depth. Some of the principles conflict with each
 other, so we have to use our judgment when they conflict.
 
 0. *Every line is teaching material*. We should respect the students' time, and
-   not have anything that is not useful to them.
+   not have anything that is not useful to them (e.g. internal notes). This does
+   not mean we cannot make references for suggested reading that goes beyond the
+   course learning goals.
 
-1. If in doubt, follow the style of the existing code base. It may not be
+1. These notes are the foundational material and source of truth for the course.
+   Everything else is secondary and derived from the notes. If we want to add a
+   new concept to the exercises, assignment, or exam, we should first find a
+   place for it in the notes.
+
+2. If in doubt, follow the style of the existing code base. It may not be
    perfect, but if we change it, we should change it comprehensively, rather
    than making it internally incongruent.
 
-2. Minimise usage of Haskell features. We use Haskell to demonstrate concepts,
+3. Minimise usage of Haskell features. We use Haskell to demonstrate concepts,
    but our goal is not to teach Haskell as a language beyond what is necessary
    to demonstrate the concepts as code.
 
@@ -32,7 +39,7 @@ other, so we have to use our judgment when they conflict.
       consider it extremely carefully, and it is almost always better to change
       the didactic approach than to enable an extension.
 
-3. It is OK to discuss use of real Haskell libraries pertinent to the material
+4. It is OK to discuss use of real Haskell libraries pertinent to the material
    as it can help convince the reader that these concepts are not just academic
    toys, but we should minimise how much of the API surface we use. Examples of
    libraries we use:
@@ -52,7 +59,7 @@ other, so we have to use our judgment when they conflict.
    Instead of using some advanced library feature, it may be better to use just
    the basic library features and show how complex stuff can be built on top.
 
-4. Accept Haskell details that we may not think are didactically optimal, but
+5. Accept Haskell details that we may not think are didactically optimal, but
    are inescapable as long as we use Haskell. An example of the
    `Functor`/`Applicative`/`Monad` hierarchy, and how the various monadic
    operations (which are our main interest) are distributed among them. Another
@@ -62,3 +69,8 @@ other, so we have to use our judgment when they conflict.
    `Applicative` that much, and once we are done introducing it, we use
    boilerplate definitions for its instances based on the "real work" done for
    `Functor` and `Monad` (chapter 2 covers this).
+
+6. The notes start out with syntactically very straightforward Haskell, and then
+   gradually (but not according to any prescribed schedule) we start using
+   fancier operators, `$` instead of parentheses, backtics for infix operators,
+   etc.
