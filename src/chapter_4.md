@@ -494,15 +494,6 @@ elsewhere. The definition is as follows[^church]:
 {{#include ../haskell/Week4/Free.hs:Free}}
 ```
 
-The `data ... where` form is *GADT syntax*. For a regular recursive type such
-as this one it is notation only: it writes out each constructor's type instead
-of leaving it implicit, and the declaration means exactly what the Haskell 98
-form `data Free e a = Pure a | Free (e (Free e a))` means. GADT syntax also
-admits two things the Haskell 98 form cannot express — a constructor whose
-result type is more specific than the declared head, and existentially
-quantified type variables. The first is not used anywhere in this chapter; the
-second appears once, in `ErrorOp` below.
-
 This looks quite cryptic, but it is possible to understand based on
 what we already know. The `Pure` constructor is straightforward: it
 represents a computation that has finished with a value of type `a`.
@@ -952,12 +943,26 @@ needed for this course.
 
 ### Implementing an Error Monad
 
-As another example, consider a free monad with error handling, very
-similar to that provided by `Either`. Here we support two effects:
-throwing an error and catching an error:
+As another example, consider a free monad with error handling, similar to that
+provided by `Either`. The main thing we will find is that it is easy to define a
+free effect that is law-abiding and intuitively appears correct, but exhibits
+unexpected behaviour. We will need to introduce a new language construct to fix
+it.
+
+We define the `ErrorOp` effect as follows, which is hopefully not hard to
+understand:
 
 ```Haskell
-{{#include ../haskell/Week4/Free.hs:Error}}
+-- Beware: subtly wrong!
+data ErrorOp e a
+  = ErrorThrow e
+  | ErrorCatch a (e -> a)
+
+instance Functor (ErrorOp e) where
+  fmap _ (ErrorThrow e) = ErrorThrow e
+  fmap f (ErrorCatch a c) = ErrorCatch (f a) $ \e -> f (c e)
+
+type Error e a = Free (ErrorOp e) a
 ```
 
 The interpretation function `runError` is a little more sophisticated
@@ -966,79 +971,100 @@ handle the error cases. However, it is fundamentally very similar to
 the bind method we have seen previously for the `Either` monad.
 
 ```Haskell
-{{#include ../haskell/Week4/Free.hs:runError}}
+runError :: Error e a -> Either e a
+runError (Pure x) = Right x
+runError (Free (ErrorThrow e)) = Left e
+runError (Free (ErrorCatch x c)) =
+  case runError x of
+    Left e -> runError $ c e
+    Right x' -> Right x'
 ```
 
 Finally, we can define the usual boilerplate accessor functions for
 using the effects:
 
 ```Haskell
-{{#include ../haskell/Week4/Free.hs:throw_catch}}
+throw :: e -> Error e a
+throw e = Free $ ErrorThrow e
+
+catch :: Error e a -> (e -> Error e a) -> Error e a
+catch x c = Free $ ErrorCatch x c
 ```
 
-Look carefully at `ErrorCatch`. It does not fit the recipe given earlier, and
-it is the first effect in this chapter that does not. Every previous
-constructor meant "perform this operation, then continue", and its payload
-was a *continuation*. `ErrorCatch` takes three arguments, and only the last
-of them is a continuation:
-
-```Haskell
-ErrorCatch :: ErrorM e x -> (e -> ErrorM e x) -> (x -> a) -> ErrorOp e a
-```
-
-The first two are whole *computations*, at a result type `x` of their own,
-which the interpreter runs and whose outcome it inspects — run the first, and
-only if it fails, run the second. The third is the ordinary continuation,
-which receives whichever value survives. The interpreter is no longer just
-giving meaning to an operation; it decides whether, and how often, a
-computation handed to it runs.
-
-The type variable `x` occurs only in the arguments of the constructor, not in
-its result, so it is existentially quantified; this is why `ErrorOp` is
-declared in GADT syntax.
-
-Most genuinely interesting effects have this shape: transactions, retries,
-timeouts, resource scoping, loops you can break out of. You will implement
-several of them in assignment 4, where `TryCatchOp (EvalM Val) (EvalM Val)
-(Val -> a)` is the same shape with `x` fixed to `Val`.
-
-~~~admonish warning title="Why the branches must not sit at the parameter"
-It looks as though `ErrorCatch` could have been given the simpler type
-
-```Haskell
-data ErrorOp e a = ... | ErrorCatch a (e -> a)
-```
-
-with the branches at the parameter `a`. It typechecks, and its `Functor`
-instance is lawful:
-
-```Haskell
-fmap f (ErrorCatch m h) = ErrorCatch (f m) (f . h)
-```
-
-But `fmap` now rewrites the scrutinee `m`, and `fmap` is what `>>=` uses to
-push a continuation into a layer. So `>>=` distributes into the branches:
+Although these definitions look right, and the `Functor` instance for `ErrorOp`
+is law-abiding, our definition of `catch` behaves unexpectedly. The problem is
+that for `Free`, the `>>=` operator distributes the continuation into every
+branch of the continuation type, leading to the following equality:
 
 ```Haskell
 (m `catch` h) >>= k   ==   (m >>= k) `catch` (\e -> h e >>= k)
 ```
-
-and `k` ends up running *inside* the handler. If the `catch` succeeds and `k`
+Essentially, the continuation `k` ends up running *inside* the handler. If the `catch` succeeds and `k`
 afterwards throws, the handler catches an exception raised after the `catch`
-had already finished:
+had already finished. With a concrete example:
 
 ```Haskell
-k v = if v == 1 then throw "E2" else return v
+k _ = throw "E2"
 
-> runError (catch (return 1) (\_ -> return 99) >>= k)
-Right 99          -- exception handling would give Left "E2"
+> runError ((return 1) `catch` (\_ -> pure 99) >>= k)
+Right 99
 ```
 
-What prevents this is not that the branches are `Free` values — they are
-`Free` values in the broken version too. It is that they sit at a result type
-of their own, with the operation's continuation kept separate, so that `fmap`
-can reach the continuation and nothing else.
-~~~
+We could expect this to always throw an error, since that is what `k` does, but
+the exception handler `(\_ -> pure 99)` is also applied to the continuation `k`.
+The behaviour we have here is not wrong from a type-class perspective, but it is
+certainly not like most `catch` constructs in real programming language. It
+behaves more like installing an exception handler that is dynamically active
+*for the entire rest of the computation*, which is certainly a feature that may
+be meaningful, but is not really what we intended.
+
+To fix this, we need to define an `ErrorOp e a` where the "action to perform in
+case of error" is *not* a continuation as far as `Free` is concerned. This means
+it must have a different type than `a`, or else we cannot define the `Functor`
+instance, as that must apply the given function to *every* `a` in order to be
+lawful.
+
+The solution is to use *existential quantification* to bind a type parameter `x`
+that is known *only* inside the `ErrorCatch` constructor, and then have express
+the `ErrorCatch` constructor as containing three values:
+
+* The immediate action to perform, of type `ErrorM e x`.
+
+* The action to perform in case of error, of type `e -> ErrorM e x`.
+
+* The continuation, of type `x -> a`.
+
+In Haskell it is written in this way:
+
+```Haskell
+{{#include ../haskell/Week4/Free.hs:Error}}
+```
+
+The type variable `x` occurs only in the arguments of the constructor, not in
+its result, so it is existentially quantified; this is why `ErrorOp` uses
+existential quantification.
+
+Despite the added complexity of the type, the run function is fairly
+straightforward:
+
+```Haskell
+{{#include ../haskell/Week4/Free.hs:runError}}
+```
+
+And similarly, the accessor functions are also almost identical:
+
+```Haskell
+{{#include ../haskell/Week4/Free.hs:throw_catch}}
+```
+
+As a rule of thumb, it is generally a mistake to have more than a single real
+continuation (of type `a`) in an effect definition. At least we must give
+careful thought to the consequences when it occures. This issue occurs for many
+interesting effects: transactions, retries, timeouts, resource scoping, loops
+you can break out of. Using existential quantification is a common solution to
+this problem, although it can also be done by requiring the type of the
+"intermediate result" (`x`) to have a *specific* type, rather than be
+monomorphic. This is what you will eventually do in A4.
 
 ## The IO Monad
 

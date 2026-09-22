@@ -1,7 +1,6 @@
 [book]
 authors = ["Troels Henriksen", "Ken Friis Larsen"]
 language = "en"
-multilingual = false
 src = "src"
 title = "Advanced Programming Course Notes"
 

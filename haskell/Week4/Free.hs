@@ -1,14 +1,13 @@
-{-# LANGUAGE GADTs #-}
-
+{-# LANGUAGE ExistentialQuantification #-}
 -- | The free monad over a functor, and the effects built on it in chapter 4.
 -- The definitions here are the ones shown in the week 4 slides
 -- (ap-e2026-private/lectures/monads/Monads.hs), verbatim.
 module Week4.Free where
 
 -- ANCHOR: Free
-data Free e a where
-  Pure :: a -> Free e a
-  Free :: e (Free e a) -> Free e a
+data Free e a =
+  Pure a
+  | Free (e (Free e a))
 
 -- ANCHOR_END: Free
 
@@ -68,9 +67,9 @@ ask = Free (ReadOp Pure)
 -- ANCHOR_END: ask
 
 -- ANCHOR: StateOp
-data StateOp s r where
-  StateGet :: (s -> r) -> StateOp s r
-  StatePut :: s -> r -> StateOp s r
+data StateOp s r =
+    StateGet (s -> r)
+  | StatePut s r
 
 -- ANCHOR_END: StateOp
 
@@ -104,13 +103,9 @@ get = Free (StateGet Pure)
 -- ANCHOR_END: put_get
 
 -- ANCHOR: Error
--- The scrutinee and the handler are COMPUTATIONS at their own result type x
--- (existentially quantified, hence the GADT syntax); only the third argument
--- is a continuation.  So fmap -- and hence (>>=) -- reaches the continuation
--- and nothing else.
-data ErrorOp e a where
-  ErrorThrow :: e -> ErrorOp e a
-  ErrorCatch :: ErrorM e x -> (e -> ErrorM e x) -> (x -> a) -> ErrorOp e a
+data ErrorOp e a =
+  ErrorThrow e
+  | forall x . ErrorCatch (ErrorM e x) (e -> ErrorM e x) (x -> a)
 
 instance Functor (ErrorOp e) where
   fmap _ (ErrorThrow e) = ErrorThrow e
@@ -139,6 +134,40 @@ catch :: ErrorM e a -> (e -> ErrorM e a) -> ErrorM e a
 catch m h = Free (ErrorCatch m h Pure)
 
 -- ANCHOR_END: throw_catch
+
+-- ANCHOR: Error
+data ErrorOp e a =
+  ErrorThrow e
+  | forall x . ErrorCatch (ErrorM e x) (e -> ErrorM e x) (x -> a)
+
+instance Functor (ErrorOp e) where
+  fmap _ (ErrorThrow e) = ErrorThrow e
+  fmap f (ErrorCatch m h c) = ErrorCatch m h (f . c)
+
+type ErrorM e a = Free (ErrorOp e) a
+
+-- ANCHOR_END: Error
+
+-- ANCHOR: runError
+runError :: ErrorM e a -> Either e a
+runError (Pure x) = Right x
+runError (Free (ErrorThrow e)) = Left e
+runError (Free (ErrorCatch m h c)) =
+  case runError m of
+    Right x -> runError (c x)
+    Left err -> runError (h err >>= c)
+
+-- ANCHOR_END: runError
+
+-- ANCHOR: throw_catch
+throw :: e -> ErrorM e a
+throw e = Free (ErrorThrow e)
+
+catch :: ErrorM e a -> (e -> ErrorM e a) -> ErrorM e a
+catch m h = Free (ErrorCatch m h Pure)
+
+-- ANCHOR_END: throw_catch
+
 
 -- ANCHOR: FibOp
 data FibOp a = FibLog String a
