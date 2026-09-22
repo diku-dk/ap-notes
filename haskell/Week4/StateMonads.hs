@@ -1,6 +1,6 @@
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
@@ -29,7 +29,7 @@ modify f = get >>= (put . f)
 
 -- ANCHOR: tick
 tick :: (StateMonad m Int) => m Int
-tick = do { n <- get; put (n + 1); return n }
+tick = do n <- get; put (n + 1); return n
 
 -- ANCHOR_END: tick
 
@@ -41,8 +41,8 @@ pop :: (StateMonad m [a]) => m (Maybe a)
 pop = do
   xs <- get
   case xs of
-    []       -> return Nothing
-    (y : ys) -> do { put ys; return (Just y) }
+    [] -> return Nothing
+    (y : ys) -> do put ys; return (Just y)
 
 stackExample :: (StateMonad m [Int]) => m (Maybe Int)
 stackExample = do
@@ -68,8 +68,12 @@ newtype FState s a = FState {runFState :: s -> (a, s)}
 
 -- ANCHOR: FState_instances
 instance Monad (FState s) where
-  c >>= f = FState (\s -> let (a, s') = runFState c s
-                          in runFState (f a) s')
+  c >>= f =
+    FState
+      ( \s ->
+          let (a, s') = runFState c s
+           in runFState (f a) s'
+      )
 
 -- Haskell requires Functor and Applicative to be DECLARED, but for a monad
 -- they need not be INVENTED: the two definitions below say nothing about
@@ -103,9 +107,12 @@ runIStateFrom s c = do
 
 -- ANCHOR: IState_instances
 instance Monad (IState s) where
-  c >>= f = IState (\ref -> do
-                              a <- runIState c ref
-                              runIState (f a) ref)
+  c >>= f =
+    IState
+      ( \ref -> do
+          a <- runIState c ref
+          runIState (f a) ref
+      )
 
 instance Applicative (IState s) where
   pure a = IState (\_ -> return a)
@@ -145,7 +152,7 @@ instance StateMonad Counting Int where
 newtype Prog = Prog (forall m. (StateMonad m Int) => m Int)
 
 threeTicks :: Prog
-threeTicks = Prog (do { _ <- tick; _ <- tick; tick })
+threeTicks = Prog (do _ <- tick; _ <- tick; tick)
 
 runIt :: Prog -> ((Int, Int), (Int, Int))
 runIt (Prog p) = (runFState p 0, runCounting p 0)
@@ -223,10 +230,10 @@ getk = (get >>=)
 -- ANCHOR_END: putk_getk
 
 -- ANCHOR: FSM
-data FSM s a where
-  Return :: a -> FSM s a
-  Getk :: (s -> FSM s a) -> FSM s a
-  Putk :: s -> FSM s a -> FSM s a
+data FSM s a
+  = Return a
+  | Getk (s -> FSM s a)
+  | Putk s (FSM s a)
 
 -- ANCHOR_END: FSM
 
