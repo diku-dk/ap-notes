@@ -1,34 +1,36 @@
+{-# LANGUAGE GADTs #-}
+
+-- | The free monad over a functor, and the effects built on it in chapter 4.
+-- The definitions here are the ones shown in the week 4 slides
+-- (ap-e2026-private/lectures/monads/Monads.hs), verbatim.
 module Week4.Free where
 
-import Control.Monad (ap)
-
 -- ANCHOR: Free
-data Free e a
-  = Pure a
-  | Free (e (Free e a))
+data Free e a where
+  Pure :: a -> Free e a
+  Free :: e (Free e a) -> Free e a
 
 -- ANCHOR_END: Free
 
 -- ANCHOR: Functor_Free
 instance (Functor e) => Functor (Free e) where
-  fmap f (Pure x) = Pure $ f x
-  fmap f (Free g) = Free $ fmap (fmap f) g
+  fmap f (Pure x) = Pure (f x)
+  fmap f (Free g) = Free (fmap (fmap f) g)
 
 -- ANCHOR_END: Functor_Free
 
 -- ANCHOR: Applicative_Free
 instance (Functor e) => Applicative (Free e) where
   pure = Pure
-  (<*>) = ap
+  Pure f <*> m = fmap f m
+  Free g <*> m = Free (fmap (<*> m) g)
 
 -- ANCHOR_END: Applicative_Free
 
 -- ANCHOR: Monad_Free
 instance (Functor e) => Monad (Free e) where
   Pure x >>= f = f x
-  Free g >>= f = Free $ h <$> g
-    where
-      h x = x >>= f
+  Free g >>= f = Free (fmap (>>= f) g)
 
 -- ANCHOR_END: Monad_Free
 
@@ -39,7 +41,7 @@ data ReadOp r a = ReadOp (r -> a)
 
 -- ANCHOR: Functor_ReadOp
 instance Functor (ReadOp r) where
-  fmap f (ReadOp g) = ReadOp $ \x -> f (g x)
+  fmap f (ReadOp g) = ReadOp (f . g)
 
 -- ANCHOR_END: Functor_ReadOp
 
@@ -61,138 +63,159 @@ runReader r (Free (ReadOp g)) = runReader r (g r)
 
 -- ANCHOR: ask
 ask :: Reader r r
-ask = Free $ ReadOp $ \x -> Pure x
+ask = Free (ReadOp Pure)
 
 -- ANCHOR_END: ask
 
 -- ANCHOR: StateOp
-data StateOp s a
-  = StatePut s a
-  | StateGet (s -> a)
+data StateOp s r where
+  StateGet :: (s -> r) -> StateOp s r
+  StatePut :: s -> r -> StateOp s r
 
 -- ANCHOR_END: StateOp
 
 -- ANCHOR: Functor_StateOp
 instance Functor (StateOp s) where
-  fmap f (StatePut s x) = StatePut s $ f x
-  fmap f (StateGet g) = StateGet $ \s -> f (g s)
+  fmap h (StateGet k) = StateGet (h . k)
+  fmap h (StatePut s a) = StatePut s (h a)
 
 -- ANCHOR_END: Functor_StateOp
 
--- ANCHOR: State
-type State s a = Free (StateOp s) a
+-- ANCHOR: FreeState
+type FreeState s a = Free (StateOp s) a
 
--- ANCHOR_END: State
+-- ANCHOR_END: FreeState
 
 -- ANCHOR: runState
-runState :: s -> State s a -> a
-runState _ (Pure x) = x
-runState s (Free (StateGet f)) = runState s (f s)
-runState _ (Free (StatePut s x)) = runState s x
+runState :: s -> FreeState s a -> (a, s)
+runState s (Pure x) = (x, s)
+runState s (Free (StateGet k)) = runState s (k s)
+runState _ (Free (StatePut s' m)) = runState s' m
 
 -- ANCHOR_END: runState
 
 -- ANCHOR: put_get
-put :: s -> State s ()
-put s = Free $ StatePut s $ Pure ()
+put :: s -> FreeState s ()
+put s = Free (StatePut s (Pure ()))
 
-get :: State s s
-get = Free $ StateGet $ \s -> Pure s
+get :: FreeState s s
+get = Free (StateGet Pure)
 
 -- ANCHOR_END: put_get
 
 -- ANCHOR: Error
-data ErrorOp e a
-  = ErrorThrow e
-  | ErrorCatch a (e -> a)
+-- The scrutinee and the handler are COMPUTATIONS at their own result type x
+-- (existentially quantified, hence the GADT syntax); only the third argument
+-- is a continuation.  So fmap -- and hence (>>=) -- reaches the continuation
+-- and nothing else.
+data ErrorOp e a where
+  ErrorThrow :: e -> ErrorOp e a
+  ErrorCatch :: ErrorM e x -> (e -> ErrorM e x) -> (x -> a) -> ErrorOp e a
 
 instance Functor (ErrorOp e) where
   fmap _ (ErrorThrow e) = ErrorThrow e
-  fmap f (ErrorCatch a c) = ErrorCatch (f a) $ \e -> f (c e)
+  fmap f (ErrorCatch m h c) = ErrorCatch m h (f . c)
 
-type Error e a = Free (ErrorOp e) a
+type ErrorM e a = Free (ErrorOp e) a
 
 -- ANCHOR_END: Error
 
 -- ANCHOR: runError
-runError :: Error e a -> Either e a
+runError :: ErrorM e a -> Either e a
 runError (Pure x) = Right x
 runError (Free (ErrorThrow e)) = Left e
-runError (Free (ErrorCatch x c)) =
-  case runError x of
-    Left e -> runError $ c e
-    Right x' -> Right x'
+runError (Free (ErrorCatch m h c)) =
+  case runError m of
+    Right x -> runError (c x)
+    Left err -> runError (h err >>= c)
 
 -- ANCHOR_END: runError
 
 -- ANCHOR: throw_catch
-throw :: e -> Error e a
-throw e = Free $ ErrorThrow e
+throw :: e -> ErrorM e a
+throw e = Free (ErrorThrow e)
 
-catch :: Error e a -> (e -> Error e a) -> Error e a
-catch x c = Free $ ErrorCatch x c
+catch :: ErrorM e a -> (e -> ErrorM e a) -> ErrorM e a
+catch m h = Free (ErrorCatch m h Pure)
 
 -- ANCHOR_END: throw_catch
 
-data FibOp a
-  = FibLog String a
-  | FibMemo Int (FibM Int) (Int -> a)
-
-instance Functor FibOp where
-  fmap f (FibLog s c) = FibLog s $ f c
-  fmap f (FibMemo n fn c) = FibMemo n fn $ \y -> f (c y)
-
+-- ANCHOR: FibOp
+data FibOp a = FibLog String a
+             | FibMemo Int (FibM Int) (Int -> a)
 type FibM a = Free FibOp a
 
+instance Functor FibOp where
+  fmap f (FibLog s c)    = FibLog s (f c)
+  fmap f (FibMemo n m c) = FibMemo n m (f . c)
+
+-- ANCHOR_END: FibOp
+
+-- ANCHOR: fibLog_fibMemo
+fibMemo :: Int -> FibM Int -> FibM Int
+fibMemo n m = Free (FibMemo n m Pure)
+
+fibLog :: String -> FibM ()
+fibLog s = Free (FibLog s (Pure ()))
+
+-- ANCHOR_END: fibLog_fibMemo
+
+-- ANCHOR: fib
+fib :: Int -> FibM Int
+fib 0 = return 1
+fib 1 = return 1
+fib n = fibMemo n (do
+  fibLog ("fib(" ++ show n ++ ")")
+  x <- fib (n - 1)
+  y <- fib (n - 2)
+  return (x + y))
+
+-- ANCHOR_END: fib
+
+-- ANCHOR: pureFibM
+pureFibM :: FibM a -> a
+pureFibM (Pure x) = x
+pureFibM (Free (FibLog _ c)) = pureFibM c
+pureFibM (Free (FibMemo _ fn c)) = pureFibM (c (pureFibM fn))
+
+-- ANCHOR_END: pureFibM
+
+-- ANCHOR: ioFibM
 ioFibM :: FibM a -> IO a
-ioFibM (Pure x) = pure x
-ioFibM (Free (FibMemo _ fn c)) = do
-  fn' <- ioFibM fn
-  ioFibM $ c fn'
+ioFibM (Pure x) = return x
 ioFibM (Free (FibLog s c)) = do
   putStrLn s
   ioFibM c
+ioFibM (Free (FibMemo _ fn c)) = do
+  x <- ioFibM fn
+  ioFibM (c x)
 
-fibLog :: String -> FibM ()
-fibLog s = Free $ FibLog s $ pure ()
+-- ANCHOR_END: ioFibM
 
-fibMemo :: Int -> FibM Int -> FibM Int
-fibMemo k m = Free $ FibMemo k m pure
-
-fib :: Int -> FibM Int
-fib 0 = pure 1
-fib 1 = pure 1
-fib n = fibMemo n $ do
-  fibLog $ "fib(" ++ show n ++ ")"
-  x <- fib (n - 1)
-  y <- fib (n - 2)
-  pure $ x + y
-
-pureFibM :: FibM a -> a
-pureFibM (Pure x) = x
-pureFibM (Free (FibMemo _ x c)) = pureFibM $ c $ pureFibM x
-pureFibM (Free (FibLog _ c)) = pureFibM c
-
+-- ANCHOR: logFibM
 logFibM :: FibM a -> (a, [String])
 logFibM (Pure x) = (x, [])
-logFibM (Free (FibMemo _ x c)) =
-  let (x', x_msgs) = logFibM x
-      (c', c_msgs) = logFibM $ c $ x'
-   in (c', x_msgs ++ c_msgs)
-logFibM (Free (FibLog s x)) =
-  let (x', msgs) = logFibM x
-   in (x', msgs ++ [s])
+logFibM (Free (FibLog s c)) =
+  let (x, msgs) = logFibM c
+   in (x, s : msgs)
+logFibM (Free (FibMemo _ fn c)) =
+  let (x, msgs) = logFibM fn
+      (y, msgs') = logFibM (c x)
+   in (y, msgs ++ msgs')
 
+-- ANCHOR_END: logFibM
+
+-- ANCHOR: memoFibM
 memoFibM :: FibM a -> a
-memoFibM m = fst $ memo [] m
+memoFibM m = fst (run [] m)
   where
-    memo :: [(Int, Int)] -> FibM a -> (a, [(Int, Int)])
-    memo cache (Pure x) = (x, cache)
-    memo cache (Free (FibMemo n fn c)) =
+    run :: [(Int, Int)] -> FibM b -> (b, [(Int, Int)])
+    run cache (Pure x)              = (x, cache)
+    run cache (Free (FibLog _ c))   = run cache c
+    run cache (Free (FibMemo n fn c)) =
       case lookup n cache of
-        Just res -> memo cache $ c res
-        Nothing ->
-          let (fn', cache') = memo cache fn
-           in memo ((n, fn') : cache') (c fn')
-    memo cache (Free (FibLog _ x)) =
-      memo cache x
+        Just x  -> run cache (c x)
+        Nothing -> let (x, cache') = run cache fn
+                   in  run ((n, x) : cache') (c x)
+
+-- ANCHOR_END: memoFibM

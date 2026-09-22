@@ -29,6 +29,7 @@ library
         Week4.Exceptions
         Week4.Free
         Week4.FreeAsync
+        Week4.StateMonads
         Week5.Properties
         Week5.Stateful
         Week6.Async

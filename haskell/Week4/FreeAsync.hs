@@ -1,95 +1,109 @@
+-- | An event pump built on the free monad.  The definitions shared with the
+-- week 4 slides (ap-e2026-private/lectures/monads/Monads.hs) are verbatim the
+-- ones shown there; 'divider' and 'interactivelyRunEventM' are extra.
 module Week4.FreeAsync where
 
 import Week4.Free (Free (..))
 
+-- ANCHOR: Event
 type EventName = String
 
 type EventValue = Int
 
-type Event = (String, EventValue)
+type Event = (EventName, EventValue)
 
+-- ANCHOR_END: Event
+
+-- ANCHOR: EventOp
 data EventOp a
   = WaitFor EventName (EventValue -> a)
   | LogMsg String a
 
 instance Functor EventOp where
-  fmap f (WaitFor s c) = WaitFor s $ \x -> f (c x)
-  fmap f (LogMsg s c) = LogMsg s $ f c
+  fmap f (WaitFor s c) = WaitFor s (f . c)
+  fmap f (LogMsg s c)  = LogMsg s (f c)
 
 type EventM a = Free EventOp a
 
-waitFor :: String -> EventM EventValue
-waitFor s = Free (WaitFor s pure)
+-- ANCHOR_END: EventOp
+
+-- ANCHOR: waitFor_logMsg
+waitFor :: EventName -> EventM EventValue
+waitFor s = Free (WaitFor s Pure)
 
 logMsg :: String -> EventM ()
-logMsg s = Free $ LogMsg s $ pure ()
+logMsg s = Free (LogMsg s (Pure ()))
 
-adder :: EventM ()
+-- ANCHOR_END: waitFor_logMsg
+
+-- ANCHOR: processes
+adder, multiplier :: EventM ()
 adder = do
   logMsg "starting adder"
-  x <- waitFor "add"
-  y <- waitFor "add"
-  logMsg $ unwords [show x, "+", show y, "=", show $ x + y]
-
-multiplier :: EventM ()
+  x <- waitFor "add"; y <- waitFor "add"
+  logMsg (unwords [show x, "+", show y, "=", show (x+y)])
 multiplier = do
   logMsg "starting multiplier"
-  x <- waitFor "mul"
-  y <- waitFor "mul"
-  logMsg $ unwords [show x, "*", show y, "=", show $ x * y]
+  x <- waitFor "mul"; y <- waitFor "mul"
+  logMsg (unwords [show x, "*", show y, "=", show (x*y)])
 
 divider :: EventM ()
 divider = do
   logMsg "starting divider"
   x <- waitFor "div"
   y <- waitForDivisor
-  logMsg $ unwords [show x, "/", show y, "=", show $ x `div` y]
+  logMsg (unwords [show x, "/", show y, "=", show (div x y)])
   where
     waitForDivisor = do
       y <- waitFor "div"
       if y == 0
         then do
-          logMsg $ "Cannot divide by zero"
+          logMsg "Cannot divide by zero"
           waitForDivisor
-        else pure y
+        else return y
 
+-- ANCHOR_END: processes
+
+-- ANCHOR: stepUntilWait
 stepUntilWait :: EventM a -> IO (EventM a)
-stepUntilWait (Pure x) = pure $ Pure x
+stepUntilWait (Pure x) = return (Pure x)
 stepUntilWait (Free (LogMsg s c)) = do
-  putStrLn $ s
+  putStrLn s
   stepUntilWait c
-stepUntilWait (Free (WaitFor s c)) =
-  pure $ Free $ WaitFor s c
+stepUntilWait w@(Free (WaitFor _ _)) = return w
 
-stepSingleEvent :: EventM () -> Event -> IO (EventM ())
-stepSingleEvent (Free (WaitFor waiting_for c)) (event_name, event_val) =
-  if waiting_for == event_name
-    then stepUntilWait $ c event_val
-    else pure $ Free $ WaitFor waiting_for c
-stepSingleEvent p _ = pure p
+-- ANCHOR_END: stepUntilWait
 
-stepEventM :: [EventM ()] -> Event -> IO [EventM ()]
-stepEventM [] _ = pure []
-stepEventM (p : ps) event = do
-  p' <- stepUntilWait p
-  case p' of
-    Pure () -> stepEventM ps event
-    _ -> do
-      p'' <- stepSingleEvent p' event
-      ps' <- stepEventM ps event
-      pure $ p'' : ps'
+-- ANCHOR: deliver
+deliver :: Event -> EventM () -> IO (EventM ())
+deliver (name, val) (Free (WaitFor wanted c))
+  | wanted == name = stepUntilWait (c val)
+deliver _ p = return p
 
+-- ANCHOR_END: deliver
+
+-- ANCHOR: runEventM
 runEventM :: [EventM ()] -> [Event] -> IO [EventM ()]
-runEventM ps [] = do
-  pure ps
+runEventM ps [] = mapM stepUntilWait ps
 runEventM ps (e : es) = do
-  ps' <- stepEventM ps e
-  runEventM ps' es
+  ps' <- mapM stepUntilWait ps
+  ps'' <- mapM (deliver e) ps'
+  runEventM ps'' es
 
+-- ANCHOR_END: runEventM
+
+-- ANCHOR: interactivelyRunEventM
 interactivelyRunEventM :: [EventM ()] -> IO ()
-interactivelyRunEventM [] = pure ()
 interactivelyRunEventM ps = do
   ps' <- mapM stepUntilWait ps
-  event <- readLn
-  ps'' <- stepEventM ps' event
-  interactivelyRunEventM ps''
+  case filter running ps' of
+    [] -> return ()
+    qs -> do
+      event <- readLn
+      qs' <- mapM (deliver event) qs
+      interactivelyRunEventM qs'
+  where
+    running (Pure ()) = False
+    running _ = True
+
+-- ANCHOR_END: interactivelyRunEventM

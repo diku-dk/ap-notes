@@ -14,15 +14,15 @@ doesNotWork = do
   let handler :: SomeException -> IO Int
       handler e = do
         putStrLn $ "It went wrong: " ++ show e
-        pure 42
-  pure (div 1 0) `catch` handler
+        return 42
+  return (div 1 0) `catch` handler
 
 doesWork :: IO Int
 doesWork = do
   let handler :: SomeException -> IO Int
       handler e = do
         putStrLn $ "It went wrong: " ++ show e
-        pure 42
+        return 42
   evaluate (div 1 0) `catch` handler
 
 data FileContents
@@ -37,5 +37,5 @@ readFileSafely f = (FileContents <$> readFile f) `catch` onException
     onException :: IOError -> IO FileContents
     onException e =
       if isDoesNotExistError e
-        then pure FileNotFound
-        else pure $ CouldNotRead $ show e
+        then return FileNotFound
+        else return $ CouldNotRead $ show e
