@@ -1,12 +1,13 @@
 {-# LANGUAGE ExistentialQuantification #-}
+
 -- | The free monad over a functor, and the effects built on it in chapter 4.
 -- The definitions here are the ones shown in the week 4 slides
 -- (ap-e2026-private/lectures/monads/Monads.hs), verbatim.
 module Week4.Free where
 
 -- ANCHOR: Free
-data Free e a =
-  Pure a
+data Free e a
+  = Pure a
   | Free (e (Free e a))
 
 -- ANCHOR_END: Free
@@ -67,8 +68,8 @@ ask = Free (ReadOp Pure)
 -- ANCHOR_END: ask
 
 -- ANCHOR: StateOp
-data StateOp s r =
-    StateGet (s -> r)
+data StateOp s r
+  = StateGet (s -> r)
   | StatePut s r
 
 -- ANCHOR_END: StateOp
@@ -103,9 +104,9 @@ get = Free (StateGet Pure)
 -- ANCHOR_END: put_get
 
 -- ANCHOR: Error
-data ErrorOp e a =
-  ErrorThrow e
-  | forall x . ErrorCatch (ErrorM e x) (e -> ErrorM e x) (x -> a)
+data ErrorOp e a
+  = ErrorThrow e
+  | forall x. ErrorCatch (ErrorM e x) (e -> ErrorM e x) (x -> a)
 
 instance Functor (ErrorOp e) where
   fmap _ (ErrorThrow e) = ErrorThrow e
@@ -136,12 +137,14 @@ catch m h = Free (ErrorCatch m h Pure)
 -- ANCHOR_END: throw_catch
 
 -- ANCHOR: FibOp
-data FibOp a = FibLog String a
-             | FibMemo Int (FibM Int) (Int -> a)
+data FibOp a
+  = FibLog String a
+  | FibMemo Int (FibM Int) (Int -> a)
+
 type FibM a = Free FibOp a
 
 instance Functor FibOp where
-  fmap f (FibLog s c)    = FibLog s (f c)
+  fmap f (FibLog s c) = FibLog s (f c)
   fmap f (FibMemo n m c) = FibMemo n m (f . c)
 
 -- ANCHOR_END: FibOp
@@ -159,11 +162,15 @@ fibLog s = Free (FibLog s (Pure ()))
 fib :: Int -> FibM Int
 fib 0 = return 1
 fib 1 = return 1
-fib n = fibMemo n (do
-  fibLog ("fib(" ++ show n ++ ")")
-  x <- fib (n - 1)
-  y <- fib (n - 2)
-  return (x + y))
+fib n =
+  fibMemo
+    n
+    ( do
+        fibLog ("fib(" ++ show n ++ ")")
+        x <- fib (n - 1)
+        y <- fib (n - 2)
+        return (x + y)
+    )
 
 -- ANCHOR_END: fib
 
@@ -205,12 +212,13 @@ memoFibM :: FibM a -> a
 memoFibM m = fst (run [] m)
   where
     run :: [(Int, Int)] -> FibM b -> (b, [(Int, Int)])
-    run cache (Pure x)              = (x, cache)
-    run cache (Free (FibLog _ c))   = run cache c
+    run cache (Pure x) = (x, cache)
+    run cache (Free (FibLog _ c)) = run cache c
     run cache (Free (FibMemo n fn c)) =
       case lookup n cache of
-        Just x  -> run cache (c x)
-        Nothing -> let (x, cache') = run cache fn
-                   in  run ((n, x) : cache') (c x)
+        Just x -> run cache (c x)
+        Nothing ->
+          let (x, cache') = run cache fn
+           in run ((n, x) : cache') (c x)
 
 -- ANCHOR_END: memoFibM
