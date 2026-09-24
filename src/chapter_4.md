@@ -1326,7 +1326,8 @@ the interface never mentions.
 
 ### An Uncontrived Real World Example
 
-To start with, let us consider the recursive Fibonacci function:
+To start out with, let us consider one of the most interesting and
+useful functions, the recursive Fibonacci function:
 
 ```Haskell
 fib :: Int -> Int
