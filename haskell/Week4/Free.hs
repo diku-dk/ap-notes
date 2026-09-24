@@ -14,16 +14,14 @@ data Free e a
 
 -- ANCHOR: Functor_Free
 instance (Functor e) => Functor (Free e) where
-  fmap f (Pure x) = Pure $ f x
-  fmap f (Free g) = Free $ fmap (fmap f) g
+  fmap f m = m >>= pure . f
 
 -- ANCHOR_END: Functor_Free
 
 -- ANCHOR: Applicative_Free
 instance (Functor e) => Applicative (Free e) where
   pure = Pure
-  Pure f <*> m = fmap f m
-  Free g <*> m = Free (fmap (<*> m) g)
+  mf <*> ma = mf >>= \f -> ma >>= pure . f
 
 -- ANCHOR_END: Applicative_Free
 
@@ -52,14 +50,10 @@ type Reader r a = Free (ReadOp r) a
 
 -- ANCHOR: RunReader
 runReader :: r -> Reader r a -> a
--- ANCHOR_END: RunReader
--- ANCHOR: RunReader_Pure
 runReader _ (Pure x) = x
--- ANCHOR_END: RunReader_Pure
--- ANCHOR: RunReader_Free
 runReader r (Free (ReadOp g)) = runReader r (g r)
 
--- ANCHOR_END: RunReader_Free
+-- ANCHOR_END: RunReader
 
 -- ANCHOR: ask
 ask :: Reader r r
