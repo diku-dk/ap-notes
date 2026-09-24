@@ -1,186 +1,126 @@
 # More Monads
 
+Before we build new monads, it is worth recalling what a monad
+is. We then show how monad parameterisation and free monads can be used to write code 
+that generates computations once and then executes computations using different concrete monads. 
+Finally, we provide examples of applying free monads to a selection of programming problems, 
+ranging from various implementations of the state monad to memoisation, exception handling and
+a form of asynchronous programming.
+
 ## Monads Revisited
 
-Before we build new monads, it is worth being precise about what a monad
-*is*, because the rest of this chapter is about constructing one
-mechanically.
-
-### Monads as Abstract Data Types
-
-A *computation* is a value that wraps up code which, **if and only if** it
-is executed, performs some side effects and finally returns a value. This is
-the key idea behind monadic programming, and it is worth dwelling on: `IO
-()` is not an action that happens, it is a *description* of an action, which
-is an ordinary Haskell value until something runs it. The same is true of
-`State s a` from chapter 2, and of everything we build below.
-
-A *monad* is then an abstract data type `M a` of computations, with an
-interface
+Recall that an *abstract* monad is an *abstract data type*. It has the 
+*interface* consisting of the operation signatures
 
 ```Haskell
-fmap   :: (a -> b) -> M a -> M b
-return :: a -> M a                   -- Applicative spells it pure
-(>>=)  :: M a -> (a -> M b) -> M b
+  -- type M a
+  fmap   :: (a -> b) -> M a -> M b
+  pure   :: a -> M a                   
+  (>>=)  :: M a -> (a -> M b) -> M b
 ```
 
-subject to equational laws. The point of the laws is that `return` should
-have no effects of its own, and that `>>=` should be a genuine sequencing
-operator — associative, with `return` as its unit:
+and certain properties these operations must satisfy. The operation `(>>=)` is called *bind*.  
+We can optionally use the name `return` instead of `pure` in monads, which emphasises that the operation does 
+nothing else but return its argument.  We will stick to `pure` in the code in these notes, however.
+
+A generally useful function is *Kleisli composition* `(>=>)`. It is defined using bind by
 
 ```Haskell
-return x >>= f    ==  f x
-m >>= return      ==  m
-(m >>= f) >>= g   ==  m >>= (\x -> f x >>= g)
-```
-
-An equivalent presentation, and the one used in category theory, replaces
-`>>=` by `join`, which flattens a computation that produces a computation:
-
-```Haskell
-class Functor m => Monad m where
-  return :: a -> m a
-  join   :: m (m a) -> m a
-```
-
-with the laws
-
-```Haskell
-join (return c)      ==  c
-join (fmap return c) ==  c
-join (join c)        ==  join (fmap join c)
-```
-
-The two presentations define each other: `join c = c >>= id` and `m >>= f =
-join (fmap f m)`. Categorically, a monad on a category (for us: `Hask`,
-whose objects are types and whose arrows are functions) is a functor
-together with two natural transformations `return` and `join` satisfying
-exactly these equations. We will use the `join` form once, when we say what
-an interpretation of a free monad is.
-
-A third presentation composes functions `a -> m b` — *Kleisli arrows* —
-directly:
-
-```Haskell
-(>=>)  :: (a -> m b) -> (b -> m c) -> (a -> m c)
+(>=>)  :: (a -> M b) -> (b -> M c) -> (a -> M c)
 (f >=> g) x = f x >>= g
 ```
 
-With `return` as the identity and `>=>` as composition, the three laws above
-say precisely that these arrows form a category. We use `>=>` occasionally
-below, where it is shorter than writing the lambda out.
-
-~~~admonish note
-Haskell splits this interface across three classes — `Functor`,
-`Applicative` and `Monad` — for historical reasons. `Applicative` sits
-between the two: it can sequence computations whose *shape* does not depend
-on earlier results. Every monad is an applicative functor via `(<*>) = ap`,
-which is why the instances below are so often one-liners.
-~~~
-
-A *concrete* monad almost always has operations beyond this interface, with
-laws of its own. The state monad has
+The monad laws are then most easily expressed in 
+terms of Kleisli composition:
 
 ```Haskell
-get      :: State s s
-put      :: s -> State s ()
-runState :: s -> State s a -> (a, s)
+(f >=> g) >=> h   =  f >=> (g >=> h)
+pure >=> g        =  g
+f >=> pure        =  f 
 ```
 
-and satisfies, for example,
+The laws say that Kleisli composition is associative with `pure` as the neutral element,
+just like ordinary function composition `.` is associative with `id` as its neutral element.
+
+Another useful function is `join`. It is defined by using `(>>=)` by
+ 
+```Haskell
+join :: M (M a) -> M a 
+join m = m >>= id
+```
+
+Recall that once we have defined `pure` and `>>=`, the definition of `fmap` is essentially forced to satisfy
 
 ```Haskell
-put s >> get      ==  put s >> return s
-put s >> put s'   ==  put s'
-get >>= put       ==  return ()
+fmap f m   =  m >>= pure . f 
 ```
 
-~~~admonish warning
-It is tempting to write the first law as `put s >> get == return s`, but
-that is false: both sides return `s`, yet the left-hand side also *changes
-the state* and the right-hand side does not. Two computations are equal when
-they agree on their return value **and** on their effects. `runState 99 (put
-7 >> get)` is `(7, 7)`, while `runState 99 (return 7)` is `(7, 99)`.
-~~~
-
-This is the useful way to think about the sections that follow. A monad is
-an interface plus laws; the interesting question is how many different
-*implementations* of that interface we can give, and how cheaply we can
-switch between them.
-
-### Abstracting Over the Implementation
-
-Suppose we want to write a program that uses state, without committing to
-how the state is represented. One way is to put the operations in a type
-class and quantify over the monad:
+Similarly, `(<*>)` is typically defined using `(>>=)` by
 
 ```Haskell
-{{#include ../haskell/Week4/StateMonads.hs:StateMonad}}
+mf <*> ma = mf >>= \f -> ma >>= pure . f
 ```
 
-The functional dependency `m -> s` is the part worth dwelling on. Without it,
-`StateMonad m s` declares a *relation* between two types, and nothing says a
-given `m` has only one `s`. That is not a pedantic worry: without the
-dependency, GHC cheerfully accepts
+The upshot is that defining a monad instance in Haskell can be done by using the template below, 
+filling only the `...` in the definitions of `pure` and `>>=`.
 
 ```Haskell
-instance StateMonad (FState s) s        -- the intended one
-instance StateMonad (FState Int) Bool   -- also fine!
+instance Functor M where  
+   fmap f m   =  m >>= pure . f  
+   
+instance Applicative M where 
+   pure =  ...    -- definition of pure 
+   mf <*> ma = mf >>= \f -> ma >>= pure . f
+   
+instance Monad M where 
+   m >>= f = ...    -- definition of bind
 ```
 
-side by side, so `FState Int` genuinely has two state types and the question
-"what state does `m` carry?" has no answer.
+Note that `(>=>)` and `join` are available as monad-parameterised functions in `Control.Monad`.  
 
-The dependency is a *promise* that the relation is a partial function: at
-most one `s` per `m`. GHC uses it in both directions. It uses it to *infer* —
-given a wanted `StateMonad m s1` and a known `StateMonad m s2`, it may
-conclude `s1 ~ s2` and unify, and this fires even while `m` is still a type
-variable, which ordinary instance lookup cannot do. And it *checks* the
-promise: with the dependency in force, the second instance above is rejected
-with `Functional dependencies conflict between instance declarations`.
+## Subclasses of monads
 
-Here is what goes wrong without it:
+Subclasses of monads have operations beyond this interface, with
+additional properties. The abstract state monad `M s` over states of type `s` has operations `get` and `put`
+with the following types.
 
 ```Haskell
-copyState :: (StateMonad m Bool) => m ()
-copyState = get >>= put
+class (Monad m) => StateMonad m s | m -> s where
+  get :: m s
+  put :: s -> m ()
 ```
-
-```
-* Could not deduce (StateMonad m a0) arising from a use of 'get'
-  from the context: StateMonad m Bool
-  The type variable 'a0' is ambiguous
-```
-
-Note carefully what is *not* the problem. `>>=` does tie the state type of
-`get` to that of `put` — both are `a0`. What is missing is any link between
-`a0` and the `Bool` in the signature's constraint, and without the promise
-there need not be one.
+and properties
 
 ```Haskell
-{{#include ../haskell/Week4/StateMonads.hs:modify}}
+put s >> get      ==  put s >> pure s      -- put-get
+put s >> put s'   ==  put s'               -- put-put
+get >>= put       ==  pure ()              -- get-put
 ```
 
-~~~admonish note
-`modify` as written above in fact compiles *without* the dependency, and so
-do `push` and `pop` below: the argument `f :: s -> s` carries the signature's
-`s` into the body, so there is nothing left to infer. The trouble starts as
-soon as nothing does. In `stackExample` below, `push 3` gives the literal `3`
-a type variable of its own, which defaults to `Integer` and can then never be
-reconciled with the `Int` in the signature:
+(The functional dependency `m -> s` says: the state monad `m` determines the type `s` of state it depends on. 
+Since Haskell insists on passing a class instance implicitly to a function---the programmer *must not* 
+write it as an explicit argument---Haskell has to make sure there is a unique instance whenever such an argument  
+is needed.  Using `newtype` declarations and functional dependencies helps in disambiguating 
+when multiple instances might fit the bill.  Since instance inference is Haskell-specific trickery rather than a general 
+programming technique we will usually try to stay away from having to use them and getting into the details of how they aid 
+instance inference.) 
 
-```
-* Could not deduce (StateMonad m [Integer])
-  from the context: StateMonad m [Int]
-```
+The properties express that storing a state and then reading it is the same as storing it and returning it; 
+storing a state and then another state is the same as just storing the second state; and 
+reading the state and then storing it again is the same as doing nothing at all.
 
-The rule of thumb: without the dependency, the state type must be pinned
-*syntactically*, by an argument's type or by the result type. A type it has
-only by virtue of the class constraint is out of reach. An associated type
-family, `type S m`, makes the same promise in a different notation.
-~~~
+Note that `StateMonad` is an abstract data type: It does not contain an implementation, but it tells us what is required of any 
+implementation of a state monad--we will see several below--and what a user of *any* implementation can rely on. 
+As such, an abstract data type, including its properties, is a contract.   It obliges the implementor of a particular implementation 
+to provide the operations and ensure they satisfy the requisite properties, and it obliges the user to write code that works with *any* 
+implementation of the abstract data type, not only a particular one.  
 
-Now we can write programs that mention no implementation at all. Here is a
+## Abstracting over monads
+
+Suppose we want to write code that uses state, without committing to
+how the state is implemented. 
+
+We can write functions that are parameterised by the state monad class.  Here is a
 counter, and a small stack machine:
 
 ```Haskell
@@ -191,21 +131,17 @@ counter, and a small stack machine:
 {{#include ../haskell/Week4/StateMonads.hs:stack}}
 ```
 
-The purely functional implementation from chapter 2 is one instance. We call
-it `FState` here, to keep it distinct from the free construction we build
-later in this chapter:
+The purely functional implementation `State` from chapter 2 is one instance of `StateMonad`.
 
 ```Haskell
-{{#include ../haskell/Week4/StateMonads.hs:FState}}
+{{#include ../haskell/Week4/StateMonads.hs:State}}
 ```
 
 ```Haskell
-{{#include ../haskell/Week4/StateMonads.hs:FState_instances}}
+{{#include ../haskell/Week4/StateMonads.hs:State_instances}}
 ```
 
-We will meet two more implementations once we have seen `IORef` — one
-mutating a cell, one holding that cell inside an object — and a fourth, the
-free one, in the next section. All of them run the *same* `tick` and
+We will meet more implementations in the next section. All of them run the *same* `tick` and
 `stackExample`, with no change to their source text:
 
 ```Haskell
@@ -213,121 +149,57 @@ free one, in the next section. All of them run the *same* `tick` and
 ```
 
 ```
-> runFState tickF 0
+> runState 0 tickF 
 (0,1)
 > runFreeStateF tickFree 0
 (0,1)
 ```
 
-(Both return the pair of the value `tick` returned and the final state.)
+Both return the pair of the value `tick` returned and the final state.
 
 This technique — write against an interface, pick the implementation at the
-call site — is the first of the two ways of decoupling the use of an effect
+call site — is the first of two ways of decoupling the use of an effect
 from its interpretation. It is simple and it is what most Haskell libraries
 do.
 
-It is worth being careful about what it does and does not give us, because
-the obvious complaint about it is wrong. Once we pick `m`, the only way of
+Once we pick a state monad instance `m`, the only way of
 observing an element of `m a` is by *running* it — that is, by passing it to
-a `run...` function. This is the same point the section on computations made:
-nothing happens until something kicks off execution, and execution is the
-only window onto what happened.
+a `run...` function. Nothing happens until something kicks off execution.  
+The monad operations `pure`, `(>>=)` and 
+any primitive operations producing a computation such as `get` and `put s` only compose 
+computations; they don't execute any of the effects in them. 
 
-Consider `tickF` above. Its type is `FState Int Int`, a perfectly definite
-monad, and the value is a `newtype` around a function `Int -> (Int, Int)`.
-The `run...` function is `runFState`; apply its result to a state and you
-have the pair `tickF` returns. That pair is everything about `tickF` you can
-observe. Which operations it performed on the way, and in what order, is not
-recoverable.
-
-But that is a fact about `tickF`, not about the method. Left
-*polymorphic*, the same source text can be handed to several instances, because an implementation
-that counts `put`s is simply another instance of the class:
-
-```Haskell
-{{#include ../haskell/Week4/StateMonads.hs:Counting}}
-```
-
-```Haskell
-{{#include ../haskell/Week4/StateMonads.hs:Prog}}
-```
-
-```
-> runIt threeTicks
-((2,3),(0,3))
-```
-
-One value, interpreted at `FState` and then at a counting instance. This is
-the *tagless-final* encoding, and for the purpose of interpretation it is as
-expressive as the free monad we are about to build. Indeed the two are
-interconvertible: `Free e` is itself an instance of the class, so reifying a
-polymorphic computation produces the term, and `interpret` turns a term back into
-any instance.
-
-So the difference is not *whether* a computation admits several meanings. It
-is what you have in hand. With the type class, every meaning has to be
-arranged in advance as an instance, each one re-elaborates the source text,
-and there is no value denoting "the part not yet run". With a free monad the
-computation is *data* from the start — a tree of constructors, with functions
-at the branches: analyses are ordinary functions on data needing no instance,
-a half-run computation is a value that can be stored and resumed, rewriting a
-computation yields another computation, and an operation can carry a
-subcomputation as data. Those four are what the rest of this chapter is
-about.
-
-The second way keeps the structure.
+Consider `tickF` above. Its type is `State Int Int`, a 
+monad instance, and the value is a `newtype` around a function `Int -> (Int, Int)`.
+The `run...` function is `runState s m`.  It executes the entire computation `m` in an initial state `s`.  
+The pair it returns is everything about `tickF` one can
+observe. Which operations it performed on the way, and in which order, is opaque.
 
 ## Free Monads
 
-This section explains *free monads*. A free monad is a construction
-that lets us construct a Monad from any Functor. Although this seems
-obscure at first, it allows a style of programming design that clearly
-distinguishes the *use* of effects from the *interpretation* of
-effects.
+A *free monad* is a tree of constructors that *name* `pure` and the primitive
+operations of a monad without binding them to any particular implementation. 
+An element of a free monad is essentially data.  We can provide multiple *interpretations* 
+of the named operations.  An *interpretation* that maps the constructors to operations in a monad 
+can be automatically extended to mapping entire computations into that monad.   
+This way we achieve the same effect as monad-abstracted code.
 
-### Motivation
-
-As an example, imagine writing a function that needs to perform HTTP
-requests to do its work. For usage, these network requests really must
-be done, which requires the function to be in the `IO` monad, which
-allows it to do *anything*, not just issue network requests. Further,
-when unit testing, we may want to "mock" these network requests and
-return synthetic data instead. It would be better if the function
-could precisely describe that it depends upon being able to perform
-HTTP requests (and no other IO operations), but let whoever executes
-the function decide how exactly such requests are *implemented*:
-either by actually performing physical network communication, or by
-returning synthetic data (for testing and debugging).
-
-In other languages, this problem is solved using ideas such as
-[dependency
-injection](https://en.wikipedia.org/wiki/Dependency_injection),
-[mocking](https://microsoft.github.io/code-with-engineering-playbook/automated-testing/unit-testing/mocking/),
-and [object
-capabilities](https://en.wikipedia.org/wiki/Object-capability_model).
-As we shall see, free monads provide a rather simple (although
-sophisticated!) solution to these problems, and it is an approach that
-sees fairly wide use among functional programmers. It is the second of
-the two methods of abstracting over effects mentioned above: rather than
-making the source text polymorphic in the monad, we make the computation a
-piece of *data* that several interpreters can consume.
-
-The actual *definition* of the general concept of a free monad is
-rather abstract, and may be skimmed on a first reading. The *use* of a
-free monad is somewhat more concrete, and is more important for the
-course. We therefore build one free monad in full first — the free *state*
-monad — and only afterwards abstract from it.
+Additionally, free monad elements are *data*, which we can analyse and manipulate at 
+run time by pattern matching on the constructors used to name the primitive operations.
+A half-run computation is a value that can be stored and resumed, rewriting a
+computation yields another computation, and an operation can carry a
+subcomputation as data. 
 
 ### The Free State Monad, Directly
 
-Before giving the general construction, let us build one instance of it by
-hand, for state. The construction is short, every step is forced, and the
-general definition will then be a matter of noticing what the steps have in
-common.
+Before giving the general construction of a free monad for any set of primitive operations, 
+let us build one instance of it by
+hand, for state. The construction is short and natural, and the
+general construction will then be a matter of separating the steps into what is common and 
+what needs to be done for each set of primitive operations separately. 
 
-Start from *any* monad with `get` and `put` — that is, from any instance of
-the class of the previous section. Give each operation its continuation as an
-extra argument:
+Consider a state monad, which has primitive operations `get` and `put`. Give each operation its continuation as an
+extra argument to arrive at their *continuation-passing style* versions:
 
 ```Haskell
 {{#include ../haskell/Week4/StateMonads.hs:putk_getk}}
@@ -336,281 +208,182 @@ extra argument:
 Both directions relate the continuation-passing forms to the originals:
 
 ```Haskell
-put s = putk s return       put s >>= m  =  putk s m
-get   = getk return         get   >>= m  =  getk m
+put s = putk s pure         put s >>= m  =  putk s m
+get   = getk pure           get   >>= m  =  getk m
 ```
 
-The left-hand column is the right unit law `m >>= return == m`, so this uses
+The left-hand column is the right unit law `m >>= pure == m`, so this uses
 no property of the implementation beyond the monad laws. The point of the exercise is the
-right-hand column: in a computation built from `getk` and `putk` alone, every
-`>>=` has a *primitive operation* on its left, and the continuation-passing
-operation absorbs it. Sequencing is no longer needed as a separate operation;
-it has been pushed into the operations themselves.
+right-hand column: in a computation built from `getk` and `putk`, it can be shown that bind is no longer needed.
+Every occurrence of bind can be transformed into one that has a `get` or `put` or `pure` on the left.
+In the first two cases we can use `getk` and `putk`, and in the case of `pure` we can eliminate it using
+the monad law `pure x >>= f  =  f x`.  The bind is no longer needed as a separate operation;
+it has been pushed into the continuation arguments of primitive operations themselves.
 
-Now drop the constraint and make `getk` and `putk` *uninterpreted*: instead
-of functions that mean something in some instance, take them as constructors
-of a type `M` that merely record that the operation was requested. Their
+Now we make `getk` and `putk` *uninterpreted* named functions, that is, constructors `Getk` and `Putk`. Their
 types are
 
 ```Haskell
-Getk :: (s -> M a) -> M a
-Putk :: s -> M a -> M a
+Return :: a -> m a
+Getk   :: (s -> m a) -> m a
+Putk   :: s -> m a -> m a
 ```
-
-where `() -> M a` has been collapsed to `M a`, since a function from the unit
-type carries no more information than its result. But `M` is no longer an
-unknown monad: it is exactly the type these two constructors build. Name it,
-and add the one further constructor the two above cannot supply:
+where `() -> m a` has been replaced by `m a` since `() -> m a` and `m a` are essentially isomorphic.  
+We now build a particular `m` as the data type built by these constructors.  Let us call it `FSM s`:
 
 ```Haskell
-{{#include ../haskell/Week4/StateMonads.hs:FSM}}
+data FSM s a =
+    Return a
+  | Getk (s -> FSM s a)
+  | Putk s (FSM s a)
 ```
+ 
+We now show that `FSM s` can be made into a state monad instance by providing definitions of `pure` and `(>>=)`. 
+`pure` is just the constructor `Return`.  
+Because each primitive operation carries a continuation, `(>>=)` can be defined by 
+composing the continuation attached to a primitive operation with the continuation serving as the second argument of bind using
+Kleisli composition. Specifically, `Getk k >>= f  =  Getk (k >=> f)`.  
+Since we have `FSM s a` as the continuation argument type to `Putk` instead of `() -> FSM s a`, the corresponding
+definition becomes `Putk s m >>= f = Putk s (m >>= f)`.  Finally, for `Pure` we get `Pure x >>= f  =  f x`.
 
-`Return` is forced. `Getk` and `Putk` can only extend a computation — each takes
-an `FSM s a` and produces one — so neither can start one. `Return` is where
-the `return` of the equations above went.
-
-~~~admonish note
-`FSM s a` occurs in the argument of `Getk` only to the *right* of the arrow,
-in `s -> FSM s a`. A type occurring to the left of an arrow in its own
-declaration would not be well founded; this one is fine.
-~~~
-
-Because every operation now carries its continuation, `>>=` is no longer a
-primitive at all: it is an ordinary recursive function over the three
-constructors, which walks to the `Return` leaves and grafts `f` on.
+We arrive at the following definition of `FSM s` as a `StateMonad` instance.
 
 ```Haskell
 {{#include ../haskell/Week4/StateMonads.hs:FSM_monad}}
 ```
 
-The `Getk` case is Kleisli composition: `k >=> f` is `\s -> k s >>= f`, the
-continuation `k` followed by `f`.
+We can check that the continuation-passing equalities we started from hold by calculation:
 
-Note that `fmap` and `<*>` are defined *from* `>>=`, rather than
-independently of it. That is the right dependency order here: `>>=` is the
-operation the construction is about, and the other two are consequences.
+```Haskell
+get >>= f    =  Getk Return >>= f
+             =  Getk (\s -> Return s >>= f)
+             =  Getk f
 
-Making `FSM s` a state monad is then three lines, and the interpreter is the
-obvious recursion:
+put s >>= f  =  Putk s (Return ()) >>= f
+             =  Putk s (Return () >>= f)
+             =  Putk s (f ())
+```
+
+We can now provide a `run` function that interprets the constructor functions 
+as the corresponding functions in `State`.  
 
 ```Haskell
 {{#include ../haskell/Week4/StateMonads.hs:FSM_state}}
 ```
 
-We can check that the continuation-passing equations we started from come
-back, by calculation:
+The point of `FSM s` is that this interpretation is in its `run` function, in contrast to `State`, 
+where it is hardwired into the definitions of `get` and `put`.  In particular, after having built 
+an `FSM s a` element we can run it with another and indeed multiple implementations of the primitive operations.  
+
+
+### Abstracting the Primitive Operations
+
+`FSM s` is the free state monad.
+To get the general construction, we separate what is specific to the state monad, 
+the operations `Getk` and `Putk`, from what all monads have in common, `Return`.
+
+To do this we abstract over `FSM s a` by replacing it with a type variable `r` in the 
+constructor arguments of `Getk` and `Putk`.  The point is that instantiation of `r` to `FSM s a`
+is deferred to the point where we add `Return`.  We get a data type
 
 ```Haskell
-get >>= f    ==  Getk Return >>= f
-             ==  Getk (\s -> Return s >>= f)
-             ==  Getk f
-
-put s >>= f  ==  Putk s (Return ()) >>= f
-             ==  Putk s (Return () >>= f)
-             ==  Putk s (f ())
+data StateOp s r = StateGet (s -> r) | StatePut s r
 ```
 
-This is a third instance of `StateMonad`, so `tick`, `push`, `pop` and
-`stackExample` run over it without change — but now they build a data
-structure rather than a function:
-
-```
-> runFSM 0 (tick :: FSM Int Int)
-(0,1)
-> runFSM [] (stackExample :: FSM [Int] (Maybe Int))
-(Just 8,[])
-```
-
-### Abstracting the Recursive Occurrences
-
-`FSM` is the free state monad, and nothing above mentioned any other effect.
-To get the general construction, look at what is specific to state and what
-is not.
-
-Write `X` for `FSM s a` and list the argument types of the three
-constructors:
+so that, as a type isomorphism, we have 
 
 ```Haskell
-Return :: a         -> X
-Getk   :: (s -> X)  -> X
-Putk   :: s -> X    -> X
+X  =  a +  StateOp s X
 ```
 
-so that, as a type equation,
+where `+` is the sum type constructor.  In Haskell this means we want `X` to be a type `Free (StateOp s) a`
+that is isomorphic to `Pure a | Free (StateOp s (Free (StateOp s) a))`.   
+Replacing `StateOp s` by any type function `e` yields the definition for the free monad type:
 
 ```Haskell
-X  ==  a  +  (s -> X)  +  (s, X)
+data Free e a
+  = Pure a
+  | Free (e (Free e a))
 ```
 
-The first summand is the `Return` case and mentions no `X`. The other two are
-the operations, and each mentions `X` in exactly one place: under `s ->` for
-`Getk`, directly for `Putk`. Those are the positions where *the rest of the
-computation* goes.
-
-Abstract them. Replace that occurrence of `X` by a parameter, and collect the
-two operation summands into a type of their own:
+To define `(>>=)` for `Free e a` we need to equip `e` with a way of 
+performing Kleisli composition.  Here it is useful that 
 
 ```Haskell
-{{#include ../haskell/Week4/Free.hs:StateOp}}
+k >=> f  = (>>= f) . k
 ```
 
-Then the equation reads
+That is, we can take the current continuation `k` of a primitive operation 
+and *functionally* compose it with `(>>= f)`.  This is useful since in the definition of `e r`
+the `r` is a type variable, not the eventual free monad it is instantiated to. 
+It turns out that making `e` a functor by providing an `fmap` is exactly what is needed to 
+make `Free e a` a monad. For `StateOp` we arrive at 
 
 ```Haskell
-X  ==  a  +  StateOp s X
+{{#include ../haskell/Week4/Free.hs:Functor_StateOp}}
 ```
 
-`StateOp s r` describes *one layer* of the syntax: a single operation, with
-`r` marking the holes that its subcomputations occupy. Only the *argument*
-occurrences of `X` are abstracted; the result occurrence is what makes these
-constructors of `X` in the first place, and it is restored by the recursion
-in the next section.
-
-~~~admonish warning title="Two different `a`s"
-The parameter of `StateOp` is conventionally written `a`, which collides with
-the `a` of `FSM s a`, and they are not the same thing. In `FSM s a` — and in
-`Free e a` below — the `a` is the *return type of the computation*. In
-`StateOp s a` it is the *continuation slot*. The two coincide only once the
-recursion is tied, when the slot is filled with the recursive type itself.
-Reading `StateGet (s -> a)` as `s -> `*`rest of computation`* is what makes the
-definition stop looking arbitrary.
-
-This also answers the obvious question about step one: what became of the `M`
-in `getk :: (s -> M a) -> M a`? Twice over. As a constructor, `M a` became
-the recursive type itself, `FSM s a`; abstracting its argument occurrence
-then turned it into the parameter.
-~~~
-
-### Defining `Free`
-
-Tying the recursion back up gives the general definition. We define a monad
-`Free e a` that represents a computation producing a value of type `a` (like
-in `IO a`), where `e` is the layer functor describing the possible effects —
-`StateOp s` in the development above, and anything else of that shape
-elsewhere. The definition is as follows[^church]:
+We are now ready to provide the definition of `Free e a` as a monad:
 
 ```Haskell
-{{#include ../haskell/Week4/Free.hs:Free}}
+instance Functor e => Functor (Free e) where
+  fmap f m = m >>= pure . f                -- standard
+
+instance Functor e => Applicative (Free e) where
+  pure = Pure
+  mf <*> ma = mf >>= \f -> ma >>= pure . f  -- standard
+
+instance Functor e => Monad (Free e) where
+  Pure x >>= f = f x
+  Free g >>= f = Free $ fmap (>>= f) g     -- only interesting line
 ```
 
-This looks quite cryptic, but it is possible to understand based on
-what we already know. The `Pure` constructor is straightforward: it
-represents a computation that has finished with a value of type `a`.
+Note that the definitions of `fmap` and `(>>=)` are *not* mutually recursive.  
+The occurrence of `fmap` in the definition of `(>>=)` is the `fmap` of functor `e`, 
+not of functor `Free e`. 
 
-The `Free` constructor is more interesting - it represents an
-*effectful* computation. Note how `e` is *applied as a type
-constructor* to a type `Free e a` (which is also the type we are
-defining). Intuitively, this constructor encodes the idea of "first do
-the effect `e`, then continue executing a `Free e a`". The meaning of
-"do the effect" will be specified by the *interpretation function* we
-define for the monad (we'll return to this below), and importantly we
-can define multiple different interpretation functions for the same
-monad. This is what allows separation of concerns.
-
-The `e (Free e a)` part merits elaboration, as this is the first time
-we have seen a datatype that applies one of its type parameters to
-another type. This is an instance of "higher-order polymorphism", where
-we abstract not over *types*, but *type constructors*. While this is
-the first time we have seen this in a data type definition, it is not
-the first time we see higher-order polymorphism at all. Recall the
-`Functor` type class:
+By inlining the definition of `(>>=)` into `fmap` we arrive 
+at its recursive form, which is commonly seen:
 
 ```Haskell
-class Functor f where
-  fmap :: (a -> b) -> f a -> f b
+instance (Functor e) => Functor (Free e) where
+  fmap f (Pure x) = Pure $ f x
+  fmap f (Free g) = Free $ fmap (fmap f) g
 ```
+This duplicates the code for `(>>=)` and camouflages 
+that `fmap` can be defined the standard way, though.
 
-Intuitively, if a data type is a `Functor`, that means it is a kind of
-"container" with "elements", and we can apply an arbitrary function on
-these elements. But importantly, `f` by itself *is not a
-type*[^higher-order], but a *type constructor* that must be applied to
-an argument (such as in `f a` and `f b`) to form a type. Our use of
-`e` in the definition of `Free` works exactly the same way.
+### Example: The Free Reader Monad
 
-[^church]: This is not the only possible way to define free monads in
-Haskell, but it is the simplest one. More efficient definitions exist
-(such as
-[Control.Monad.Free.Church](https://hackage.haskell.org/package/free-5.2/docs/Control-Monad-Free-Church.html)),
-but they are more complicated, and unnecessary for our purposes.
-
-[^higher-order]: Just like how values can be classified with types, so
-can types be classified with "types of types", which in Haskell are
-called *kinds*. A normal type such as `Int` has kind `Type` (`Type` is
-often written `*` for historical reasons), while a type constructor
-such as `Maybe` has kind `Type -> Type`, meaning it is essentially a
-function at the type level. The type constructor `Free` then has kind
-`(Type -> Type) -> Type -> Type`. Actual type-level programming is a
-fascinating topic, but beyond the scope of AP.
-
-### Implementing `Reader` in terms of `Free`
-
-We will have to construct a bit more machinery before `Free` will work
-as a monad, but to skip ahead a bit, here is an idea of how we will
-use it to to implement a `Reader` monad. The `Reader` monad supports a
-single effect: we can ask for the value of an *environment* (called
-`ask` in the standard `Reader` monad). We can define a datatype
-`ReadOp r a` that encodes the notion of asking for a value of type
-`r`, then producing a value of type `a`:
-
+To construct a free monad for a given set of primitive operations 
+we need to provide a data type of constructors corresponding 
+to the operations in continuation-passing style and equip it with `fmap` 
+by systematically composing the continuation argument of each constructor with 
+the argument to `fmap`.
+   
+The reader monad has the primitive operation `ask :: Reader r r`.  Its continuation-passing form 
+is `askk :: (r -> Reader r a) -> Reader r a`.  Abstracting over `Reader r a` in the argument 
+we get the constructor `ReadOp` with argument of type `r -> a`:  
 ```Haskell
 {{#include ../haskell/Week4/Free.hs:ReadOp}}
 ```
-
-The `r -> a` value is called a *continuation*. It is a function that
-is called to resume evaluation once the requested value is ready.
-
-Further, `ReadOp` can be made a `Functor`. We will see later that this
-is necessary in order to make it usable with `Free`.
-
+with `fmap` forced to be the composition:
 ```Haskell
 {{#include ../haskell/Week4/Free.hs:Functor_ReadOp}}
 ```
-
-We can use this to construct a `Reader` monad using `Free`:
+We can use this to construct the free reader monad using `Free`:
 
 ```Haskell
 {{#include ../haskell/Week4/Free.hs:Reader}}
 ```
 
-Once we have defined `Monad` instances and such for `Free`, we will be
-able to write monadic code that makes use of it. But we also have to
-define an interpretation function that actually *runs* the monad and
-gives meaning to its effects? We want a function of the following
-type:
+A run function provides an interpretation of the `ReadOp` effect:  
 
 ```Haskell
 {{#include ../haskell/Week4/Free.hs:RunReader}}
 ```
 
-That is, given an initial value of type `r` and a computation of type
-`Reader r a`, run that computation and produce a value of type `a`.
-Since we don't know anything about `r`, our only option is to pattern
-match on the `Reader r a` value itself. The `Pure` case is trivial, as
-it represents a computation without any effects:
-
-```Haskell
-{{#include ../haskell/Week4/Free.hs:RunReader_Pure}}
-```
-
-For the second case, we are considering a value `Free (ReadOp g)`,
-where `g` is of type `r -> Reader r a`.  To see this, recall that the
-`Free` data constructor takes something of type `e (Free e a)` as a
-payload; setting `e = ReadOp r`, this type becomes `ReadOp r (Free
-(ReadOp r) a)`, which is the same as `ReadOp r (Reader r
-a)`. Referring back to the definition of `ReadOp`, we conclude that
-`g` must have type `r -> Reader r a`.
-
-We can now apply `g` to the environment to obtain a `Reader r a`, which we
-can then execute with a recursive application of `runReader`:
-
-```Haskell
-{{#include ../haskell/Week4/Free.hs:RunReader_Free}}
-```
-
-We can also define Haskell functions that hide the specific encoding
-of `Reader` behind a more familiar interface:
-
+We can now define `ask` to be the constructor `ReadOp` with `pure` as its continuation, as we have seen before:
 ```Haskell
 {{#include ../haskell/Week4/Free.hs:ask}}
 ```
@@ -619,94 +392,11 @@ While it is perhaps not terribly interesting to define other
 interpretations of the `Reader` monad, it is possible to do so; for
 example by storing the environment in a global variable or in a
 database, and defining an interpretation function that runs in `IO`
-and fetches the environment from there. The important thing is that we
-have decoupled the notion of an effect from its interpretation.
-
-### Making `Free` a `Monad`
-
-The above skipped ahead quite a bit, as we have yet to show that
-`Free` is actually a `Monad`. Any `Monad` must also be a `Functor` and
-an `Applicative`, so let us start with `Functor`. For a value of type
-`Free e a`, the `Functor` instance will be about transforming the `a`
-part.
-
-```Haskell
-{{#include ../haskell/Week4/Free.hs:Functor_Free}}
-```
-
-The `Pure` case is straightforward. For the `Free` case, we have a
-value `g` of type `e (Free e a)`, and we need to somehow transform
-that `a` inside of it. The only way we can possibly operate inside of
-that `e` is if `e` *itself* is also a `Functor`, so we add that as a
-premise of the instance definition. This is the reason why the effect
-representation we use with `Free` must always be a `Functor` (such as
-with `ReadOp` above). Note that the two `fmap`s we use are on different
-types: the outermost one uses the `Functor` instance for `e`, and the
-innermost one uses the `Functor` instance for `Free e` (recursively).
-
-~~~admonish note title="Where the `Functor` requirement comes from"
-It is worth seeing that this requirement is not a technicality invented to
-make `Free` typecheck. Look again at `FSM`'s `>>=`:
-
-```Haskell
-Getk k   >>= f = Getk (\s -> k s >>= f)
-Putk s m >>= f = Putk s (m >>= f)
-```
-
-Both equations do the same thing: apply `(>>= f)` to every subcomputation sitting
-inside the operation, and leave the operation's own data alone. Once the
-operation has been abstracted into a layer, that is exactly what `fmap` for
-that layer does. So `Functor e` is `FSM`'s bind, factored out and named — and
-that is also why the `Functor` instances in this chapter are forced rather
-than chosen.
-~~~
-
-We then move on to defining an `Applicative` instance for `Free`.
-The unit is simply the `Pure` constructor. (Haskell requires the definition
-to be given as `Applicative`'s `pure`; it is the same function as `return`,
-which is what we write everywhere else.) For `<*>` we follow the same two
-cases as `fmap`: a `Pure` function can be applied straight away, and a `Free`
-layer is descended into with the layer's own `fmap`.
-
-```Haskell
-{{#include ../haskell/Week4/Free.hs:Applicative_Free}}
-```
-
-Finally we can define the `Monad` instance and the `>>=` method
-itself.
-
-```Haskell
-{{#include ../haskell/Week4/Free.hs:Monad_Free}}
-```
-
-This definition can also be constructed largely by following the
-structure of the types. In the `Pure` case we have the following:
-
-```Haskell
-x :: a
-f :: a -> Free e b
-```
-
-and we must produce a result of type `Free e b`. This is clearly done
-simply by applying `f` to `x`.
-
-In the `Free` case we have the following:
-
-```Haskell
-g :: e (Free e a)
-f :: a -> Free e b
-```
-
-We ultimately want to apply `f` to something of type `a`, but we don't
-have an `a`. All we have is a `Free e a` hidden behind an effect `e`.
-However, since we require `e` to be a `Functor`, we can apply a function to
-each `Free e a` sitting inside the `e`. The function we need has type
-`Free e a -> Free e b`, and it is the recursive invocation `(>>= f)` itself,
-so the whole `Free` case is `Free (fmap (>>= f) g)`.
+and fetches the environment from there. This is made possible by
+decoupling the name of an effect from its interpretation.
 
 Instantiating `e` to `StateOp s` recovers the type we built by hand at the
-start of this section. The correspondence is constructor by constructor, and
-both directions are in the repository:
+start of this section. The correspondence is constructor by constructor:
 
 ```Haskell
 {{#include ../haskell/Week4/StateMonads.hs:FSM_iso}}
@@ -715,22 +405,22 @@ both directions are in the repository:
 ### The Recipe for Other Effects
 
 The two steps above — pass the continuation, then abstract the recursive
-occurrence — work for any operation, not just `get` and `put`. Given
+occurrence — work for any operation, not just `get` and `put`. Given a monadic operation
 
 ```Haskell
 op  :: T1 -> ... -> Tn -> M R
 ```
 
-passing the continuation gives
+its continuation-passing version has type
 
 ```Haskell
 opk :: T1 -> ... -> Tn -> (R -> M a) -> M a
 ```
 
-and abstracting `M a` to a parameter gives the constructor
+Abstracting `M a` to a parameter gives the constructor
 
 ```Haskell
-Op  :: T1 -> ... -> Tn -> (R -> a) -> F a
+Op  :: T1 -> ... -> Tn -> (R -> a) -> Ops a
 ```
 
 When `R` is `()`, the continuation `() -> a` collapses to a plain `a`. That
@@ -745,17 +435,16 @@ only lawful thing to write.
 ~~~
 
 Note what the recipe does *not* cover: an operation whose argument is itself
-a computation, such as `catch`. We return to that in the section on error
-handling below, and it is the shape that most of the interesting effects
+a computation, such as `catch` below. We return to that in the section on error
+handling below.  It is the shape that most of the interesting effects
 turn out to have.
 
-### Implementing `State` in Terms of `Free`
+### Example: The Free State Monad
 
 We already have `StateOp` from the development at the start of this section.
 All that remains is to make it a `Functor` — which, by the recipe above, is
 forced — and to apply `Free` to it. We call the result `FreeState`, to keep
-it apart from the `State` of chapter 2 and the `FState` above; all three
-implement the same interface.
+it apart from the `State` of chapter 2. 
 
 ```Haskell
 {{#include ../haskell/Week4/Free.hs:Functor_StateOp}}
@@ -773,7 +462,7 @@ previous section:
 {{#include ../haskell/Week4/StateMonads.hs:FreeState_instance}}
 ```
 
-Evaluation of a `FreeState` computation is also very similar to the case
+Evaluation of a `FreeState` computation is similar to the case
 for `Reader`, and takes the form of a recursive function that
 interprets the `StateOp` effects. When we encounter a `StatePut`, we
 discard the current state and use the provided one.
@@ -782,7 +471,8 @@ discard the current state and use the provided one.
 {{#include ../haskell/Week4/Free.hs:runState}}
 ```
 
-Finally, we can define the usual `put`/`get` accessor functions.
+Finally, we can define the usual `put` and `get` operations as the
+corresponding constructors with `pure` as the continuation argument.
 
 ```Haskell
 {{#include ../haskell/Week4/Free.hs:put_get}}
@@ -793,12 +483,12 @@ On top of these, we can define the usual helper functions, such as
 we already wrote against the `StateMonad` interface, since `FreeState` is
 an instance of it.
 
-### Interpreting into Any Monad
+### Interpreting into a Monad
 
 `runState` above interprets a `FreeState` computation directly into a Haskell
-function. But notice how little of it was about *state*: the `Pure` case and
+function.  Notice, however, how little of it was about *state*: the `Pure` case and
 the recursion are the same in every interpreter we have written. Only the
-treatment of the individual operations differs.
+treatment of the named primitive operations differs.
 
 We can make that precise. An *interpretation* of an effect functor `e` in a
 monad `m` is a function
@@ -808,17 +498,17 @@ h :: forall x. e x -> m x
 ```
 
 It says what a single operation means, and says nothing whatsoever about
-sequencing. The `forall x` matters: `h` must work for every result type, so
+sequencing using bind. The `forall x` matters: `h` must work for every result type, so
 it cannot inspect the continuation — it can only hand it back. (Such a
 uniform family of functions is called a *natural transformation*.)
 
-From any such `h` we get an interpreter for whole computations, mechanically:
+From any such `h` we get an interpreter for whole computations mechanically:
 
 ```Haskell
 {{#include ../haskell/Week4/StateMonads.hs:interpret}}
 ```
 
-The `Free` case is where the `join` presentation of a monad earns its keep.
+The `Free` case is where the `join` presentation of a monad is illustrated.
 We have `g :: e (Free e a)`. Applying `h` gives `m (Free e a)`: the
 operation, now performed in `m`, yielding the rest of the computation.
 Interpreting that rest with `fmap` gives `m (m a)`, and `join` flattens it.
@@ -842,7 +532,7 @@ and instantiating `m` picks the implementation:
 Just 8
 ```
 
-Going through `interpret` and then through `FState` builds an intermediate
+Going through `interpret` and then through `State` builds an intermediate
 closure for every operation. Nothing stops us from writing the composite
 directly — and in fact we already did, several pages ago. Compare
 
@@ -851,22 +541,22 @@ directly — and in fact we already did, several pages ago. Compare
 ```
 
 with `runFreeStateF`: up to the order of the arguments they are the same
-function, the second being the first with `interpret` and the `FState`
+function, the second being the first with `interpret` and the `State`
 instance inlined and the intermediate closures fused away. The hand-written
 interpreter was never a different technique; it was the general one,
 specialised.
 
 Being able to write either — the compositional one for clarity, the fused
 one for speed, and to check them against each other — is one of the
-practical benefits of having the computation as data.
+practical benefits of having computations as data.
 
 ### Computations as Data
 
-Interpreting is not the only thing we can do with a `Free e a`. It is an
+Interpreting is not the only thing we can do with an element of `Free e a`. It is an
 ordinary value, so we can also *inspect* it and *rewrite* it.
 
 Inspecting means walking the structure without running it. How far we get
-depends on the effects. `StatePut s m` carries its continuation directly, so
+depends on the effects. `StatePut s m` carries its continuation as a computation, so
 we can walk past it; `StateGet k` carries a *function*, and to get past it we
 would have to choose an `s` and apply `k` to it — and different choices give
 different computations. So a static count of the writes a computation performs is
@@ -876,67 +566,59 @@ available only until the first read:
 {{#include ../haskell/Week4/StateMonads.hs:countPuts}}
 ```
 
-This is the general limit on inspecting free-monad computations, and it is
-worth being precise about it: what you can see depends on how much of the
-computation
-was made *first-order*. Every operation that hands back a Haskell function
-is a point past which analysis cannot go on its own.
+This is the general limit on inspecting free-monad computations. 
+What you can see depends on how much of the
+computation is *first-order*. A monadic operation that returns a value of type `T`
+is represented by a constructor with a continuation of type `T -> M a` as an argument.  
+Inspecting the computation `M a` requires choosing a value of type `T`.  
 
-Rewriting means transforming the operations while leaving the sequencing
+Rewriting means transforming the operations while leaving the sequencing by bind
 alone:
 
 ```Haskell
 {{#include ../haskell/Week4/StateMonads.hs:modifyEffects}}
 ```
 
-This is the function you will use in the week 4 exercises to implement local
-environments: rewrite every read of the environment so that it sees a
-modified one, and leave every other operation as it is.
-
 ~~~admonish warning
-`modifyEffects` walks the *spine* of the computation. If an operation's payload
+`modifyEffects` walks the *spine* of the computation. If an operation's argument
 is itself a `Free` value — as `ErrorCatch` will be in the next section, and
 as most of the interesting effects in assignment 4 are — then the rewriting
-function must rebuild that payload explicitly. Leave it out and the rewrite compiles, runs, and silently
-does nothing to the part of the computation you cared about.
+function must rebuild that argument explicitly. Leave it out and the rewrite 
+does nothing to it. 
 ~~~
 
 ### What Makes `Free` Free
 
-We can now say what "free" means, and it is worth saying, because it
-explains why this construction keeps working.
+We can now say what "free" means.
 
-`Free e` is the monad generated by `e` and *nothing else*. Concretely: for
+`Free e` is the monad generated by `e` in such a way that only those equalities 
+between its elements hold that are forced by the monad laws. Specifically, for
 every monad `m` and every interpretation `h :: forall x. e x -> m x`, there
 is exactly one function `interpret h :: Free e a -> m a` that respects
-`return` and `>>=`. Existence means you never have to invent sequencing
-behaviour — writing the interpreter for the operations is the *whole* job.
-Uniqueness means there is nothing else it could have been: once you have
-fixed what `get` and `put` do, the meaning of every computation built from them
+`pure` and `(>>=)`. Existence means you never have to invent sequencing
+behaviour — writing the interpreter for the primitive operations is the *whole* job.
+Uniqueness means that once you have
+fixed what the primitive operations do, the meaning of every computation built from them
 is determined.
 
-That is also the precise sense in which `Free e` imposes no laws. `FState`
-satisfies `put s >> put s' == put s'`; the free state monad does not, because
-in it those two computations are visibly different values — a two-`StatePut`
-chain and a one-`StatePut` chain. The equation only becomes true after
-interpretation. So `Free (StateOp s)` is not *the* state monad; it is the
-syntax of state operations, from which the state monad is one quotient among
-many. Keeping the syntax around is exactly what lets us interpret it in
-several ways, and what lets `memoFibM` below do something no lawful state
-monad would.
+We noted that a state monad 
+must satisfy `put s >> put s' = put s'`.  The free state monad does not satisfy it because
+the monad laws do not force the two terms to be equal. The equation only becomes true after
+interpretation. So `Free (StateOp s)` is *not* a state monad.  Keeping the names of 
+primitive operations is what lets us interpret them in multiple ways.
 
 ~~~admonish warning title="The cost of freedom"
-The representation we use here has a performance trap. In `m >>= f` with `m
+The representation we use for free monads has a performance trap. In `m >>= f` with `m
 = Free g`, the bind is pushed *through* the whole of `m` by `fmap`. So a
 left-nested chain `((m1 >>= f1) >>= f2) >>= ...` re-traverses its prefix at
 every step, and building an `n`-operation computation that way takes time quadratic in
 `n`. Right-nested chains — what `do` notation produces from
 straight-line code — are fine, which is why this rarely bites in practice.
 
-Recursive functions that append are the usual way to hit it. Fixes are
+Fixes are
 known: continuation-passing (Church) encodings, as in
 [`Control.Monad.Free.Church`](https://hackage.haskell.org/package/free-5.2/docs/Control-Monad-Free-Church.html),
-make `>>=` constant-time but destroy the very inspectability we came for;
+make `>>=` constant-time but destroy the very inspectability we get from using constructors;
 representing the continuation as a type-aligned queue keeps both. Neither is
 needed for this course.
 ~~~
@@ -949,8 +631,7 @@ free effect that is law-abiding and intuitively appears correct, but exhibits
 unexpected behaviour. We will need to introduce a new language construct to fix
 it.
 
-We define the `ErrorOp` effect as follows, which is hopefully not hard to
-understand:
+We define the `ErrorOp` effect as follows.
 
 ```Haskell
 -- Beware: subtly wrong!
@@ -1004,16 +685,17 @@ afterwards throws, the handler catches an exception raised after the `catch`
 had already finished. With a concrete example:
 
 ```Haskell
-k _ = throw "E2"
+k 1 = throw "E2"
+k v = pure v
 
-> runError ((return 1) `catch` (\_ -> pure 99) >>= k)
+> runError ((pure 1) `catch` (\_ -> pure 99) >>= k)
 Right 99
 ```
 
 We could expect this to always throw an error, since that is what `k` does, but
 the exception handler `(\_ -> pure 99)` is also applied to the continuation `k`.
 The behaviour we have here is not wrong from a type-class perspective, but it is
-certainly not like most `catch` constructs in real programming language. It
+certainly not like most `catch` constructs in real programming languages. It
 behaves more like installing an exception handler that is dynamically active
 *for the entire rest of the computation*, which is certainly a feature that may
 be meaningful, but is not really what we intended.
@@ -1025,7 +707,7 @@ instance, as that must apply the given function to *every* `a` in order to be
 lawful.
 
 The solution is to use *existential quantification* to bind a type parameter `x`
-that is known *only* inside the `ErrorCatch` constructor, and then have express
+that is known *only* inside the `ErrorCatch` constructor, and then express
 the `ErrorCatch` constructor as containing three values:
 
 * The immediate action to perform, of type `ErrorM e x`.
@@ -1041,8 +723,7 @@ In Haskell it is written in this way:
 ```
 
 The type variable `x` occurs only in the arguments of the constructor, not in
-its result, so it is existentially quantified; this is why `ErrorOp` uses
-existential quantification.
+its result, so it is existentially quantified.
 
 Despite the added complexity of the type, the run function is fairly
 straightforward:
@@ -1059,12 +740,12 @@ And similarly, the accessor functions are also almost identical:
 
 As a rule of thumb, it is generally a mistake to have more than a single real
 continuation (of type `a`) in an effect definition. At least we must give
-careful thought to the consequences when it occures. This issue occurs for many
+careful thought to the consequences when it occurs. This issue occurs for many
 interesting effects: transactions, retries, timeouts, resource scoping, loops
 you can break out of. Using existential quantification is a common solution to
-this problem, although it can also be done by requiring the type of the
-"intermediate result" (`x`) to have a *specific* type, rather than be
-monomorphic. This is what you will eventually do in A4.
+this problem, although it can also be done by requiring the "intermediate
+result" `x` to have a *specific* type, rather than be existentially
+quantified. 
 
 ## The IO Monad
 
@@ -1077,12 +758,12 @@ and while it is certainly very convenient, it does not let us do
 anything we could not otherwise do. Ultimately, the monads you have
 seen have merely been convenient and abstract ways of doing things
 that could also be done in non-monadic Haskell, and they are indeed
-all ultimately expressed in terms non-monadic code.
+all ultimately expressed in terms of non-monadic code.
 
 There is one exception, however: the `IO` monad is truly built into
 the language, and cannot be expressed using normal Haskell. It is the
 ultimate mechanism by which Haskell programs interact with the
-surrounding world. This is evident in the type of `main`; the
+surrounding world. This is evident in the type of `main`, the
 canonical entry point for Haskell programs:
 
 ```Haskell
@@ -1103,16 +784,16 @@ There are various metaphors for how to understand `IO`. One is that it
 is a kind of state monad that passes around the entire state of the
 universe, with functions like `putStr` and `readFile` modifying the
 state, the same way `put` and `get` modify the state of the `State`
-monad. This interpretation is useful to an extent, but break downs
+monad. This interpretation is useful to an extent, but breaks down
 when considering concurrency, which we will look at later in the
 course. Ultimately, it is most useful to simply consider `>>=` for the
-IO monad as straight up impure and executing side effects.
+IO monad as straight-up impure and executing side effects.
 
 ### Programming with IO
 
 Programming with the `IO` monad in Haskell is very similar to
 programming in a conventional imperative language, and the same as
-with programming with any other monad. However, the fact that it so
+with programming with any other monad. However, the fact that it is so
 similar to other languages means that our intuition can sometimes
 betray us. For example, consider the function `putStrLn`, which prints
 a given string to stdout, and has the following type:
@@ -1136,17 +817,17 @@ then returns the unit value. In fact, this expression just has type
 `()` - it is not monadic at all. In order to actually *execute* an
 effect, we must pass it to `>>=` somehow, putting together an even
 larger `IO` operation, which must ultimately be the definition of the
-program `main` function:
+program's `main` function:
 
 ```Haskell
 main :: IO ()
-main = putStrLn "hello world" >>= \_ -> return ()
+main = putStrLn "hello world" >>= \_ -> pure ()
 
 -- or equivalently
 
 main :: IO ()
 main = do putStrLn "hello world"
-          return ()
+          pure ()
 ```
 
 The fact that IO operations are normal Haskell values, that just
@@ -1204,7 +885,7 @@ Haskell programmers, because they make the types unreliable. Instead
 `head` should perhaps return a `Maybe` value. Yet even adherents of
 this approach may hesitate to make functions such as `div` return
 `Maybe`, due to the sheer amount of boilerplate this would require
-(even when using monads to propagate the error situaton).
+(even when using monads to propagate the error situation).
 
 Further, other exceptions are harder to avoid: they are also raised
 for out-of-memory situations or various asynchronous signals. Most
@@ -1231,7 +912,7 @@ in the IO monad. The facilities for working with exceptions are found
 in
 [Control.Exception](https://hackage.haskell.org/package/base-4.20.0.1/docs/Control-Exception.html).
 This is a rather rich and complicated module, and we will not need
-much of what it provides. The main things we will need is the `catch`
+much of what it provides. The main thing we will need is the `catch`
 function:
 
 ```Haskell
@@ -1243,7 +924,7 @@ which you might be familiar with from other languages. The `catch`
 function takes two arguments. It tries to run the provided `IO`
 action, and if an exception is thrown during that action, it calls the
 provided handler function with the exception. The wrinkle is that
-`catch` is *polymorphic*, while an exception is any value that
+`catch` is *polymorphic*: since an exception is any value that
 implements the `Exception` typeclass, any use of `catch` must somehow
 specify *exactly* which type of exception is caught by this specific
 `catch`. This may sound unclear, so here is an example where we try to
@@ -1264,10 +945,10 @@ This will give us a rather long (here abbreviated) error message:
 ```
 
 The problem is that `catch` can handle *any* exception, so how is
-Haskell to know which one we know? We need to put in a type annotation
-to specify the one we are interested in. For AP we will mainly use the
+Haskell to know which one we mean? We need to put in a type annotation
+to specify the one we are interested in. We will mainly use the
 type `SomeException`, which acts as a "root type" for all other kinds
-of exceptions. In general, in AP we will not discriminate between
+of exceptions. In general, we will not discriminate between
 different types of exceptions, although Haskell provides facilities
 for doing so. The easiest way to indicate that this is the exception
 we want to catch is to make the handler a local function with an
@@ -1349,8 +1030,8 @@ readFileSafely f = (FileContents <$> readFile f) `catch` onException
     onException :: IOError -> IO FileContents
     onException e =
       if isDoesNotExistError e
-        then return FileNotFound
-        else return $ CouldNotRead $ show e
+        then pure FileNotFound
+        else pure $ CouldNotRead $ show e
 ```
 
 And observe how well it works:
@@ -1378,8 +1059,8 @@ doesNotWork = do
   let handler :: SomeException -> IO Int
       handler e = do
         putStrLn $ "It went wrong: " ++ show e
-        return 42
-  return (div 1 0) `catch` handler
+        pure 42
+  pure (div 1 0) `catch` handler
 ```
 
 But we receive an unpleasant surprise:
@@ -1392,7 +1073,7 @@ But we receive an unpleasant surprise:
 The reason is that the expression `div 1 0` is not actually fully
 evaluated inside the computation protected by `catch` - instead it is
 simply returned un-evaluated, and not until `ghci` tries to print the
-result of the computation (after `catch` is done) will be division
+result of the computation (after `catch` is done) will the division
 actually be attempted and the exception thrown.
 
 One solution is to use the `evaluate` function, also from
@@ -1402,12 +1083,12 @@ One solution is to use the `evaluate` function, also from
 evaluate :: a -> IO a
 ```
 
-An expression `evaluate x` is much like `return x`, but evaluates its
+An expression `evaluate x` is much like `pure x`, but evaluates its
 argument to *weak head normal form* (*WHNF*) before injecting it into
 the monad. Intuitively, it will evaluate the provided expression up to
 the *first* constructor, hopefully uncovering any exceptions
 immediately. For `Int`, that will be the entire value, but for a
-lists, it will only be up to the first cons cell. However, this is
+list, it will only be up to the first cons cell. However, this is
 enough to make this simple example work:
 
 ```Haskell
@@ -1416,7 +1097,7 @@ doesWork = do
   let handler :: SomeException -> IO Int
       handler e = do
         putStrLn $ "It went wrong: " ++ show e
-        return 42
+        pure 42
   evaluate (div 1 0) `catch` handler
 ```
 
@@ -1448,7 +1129,7 @@ writeIORef :: IORef a -> a -> IO ()
 ```
 
 While other utility functions exist, this interface is all we need in
-order to interact with IORefs.
+order to interact with `IORef`s.
 
 ```Haskell
 > r <- newIORef True
@@ -1469,24 +1150,24 @@ programming with mutable state.
 
 ~~~
 
-### An Imperative State Monad
+### Example: Imperative State Monad
 
-We promised earlier a further implementation of the `StateMonad` interface.
-With `IORef` in hand we can give it: keep the state in a mutable cell, and
+We promised earlier that we would provide another implementation of the `StateMonad` interface.
+We keep the state in a mutable cell of type `IORef ...` and
 let a computation be a function from that cell to an `IO` action.
 
 ```Haskell
 {{#include ../haskell/Week4/StateMonads.hs:IState}}
 ```
 
-The instances are unremarkable — all the work is done by `IO`:
+The instance definitions are unremarkable:
 
 ```Haskell
 {{#include ../haskell/Week4/StateMonads.hs:IState_instances}}
 ```
 
 This is the implementation an imperative programmer would have written
-first, and it is genuinely different from `FState`: it mutates one cell
+first, and it is genuinely different from `State`: it mutates one cell
 rather than threading a value. Yet it satisfies the same laws, and
 
 ```Haskell
@@ -1494,22 +1175,20 @@ tickI :: IState Int Int
 tickI = tick
 ```
 
-is the same `tick` we ran with `FState`, at a different type.
+is the same `tick` we ran with `State`, at a different type.
 
 ~~~admonish note
-`IState` is not more efficient than `FState` in any deep sense — GHC is
+`IState` is not more efficient than `State` in any deep sense — GHC is
 perfectly good at compiling state threading — but it is the shape you are
 forced into when the state lives outside the program: a file, a database, a
-device. Assignment 4 has you do exactly that, with the key-value store held
-in a file.
+device. 
 ~~~
 
-### A State Monad from an Object
+### Example: Object-based State Monad
 
-`IState` passes the reference to every operation. It is worth asking whether
-the reference could instead be *held*, as the private field of an object is
-held, with `get` and `put` as its methods. It can, and the result is a fourth
-implementation of the same interface.
+`IState` passes the reference holding the state to every operation. It is worth asking whether
+the state could be kept as the private field of an object that has `get` and `put` as its methods. It can, and the result is a fourth
+implementation of the `StateMonad` interface.
 
 An object is a record of operations closed over a cell that nothing else can
 reach:
@@ -1532,8 +1211,8 @@ running one allocates a fresh object:
 {{#include ../haskell/Week4/StateMonads.hs:OState_instances}}
 ```
 
-Read the three definitions in order. `return a` *discards* the object, which
-is exactly why it performs no side effects. `m >>= f` hands the *same* object
+Reading the three definitions in order, `pure a` *ignores* the object, which
+is exactly why it performs no side effects; `m >>= f` hands the *same* object
 to both halves, which is why the second sees what the first did. `get` and
 `put` are the object's own methods, lifted into the monad. As always,
 `fmap` and `<*>` follow from `>>=`.
@@ -1599,10 +1278,10 @@ is nothing to inspect, rewrite or suspend.
 
 ## Free Monads with IO
 
-The example of free monads we saw above are perhaps a bit contrived,
+The examples of free monads we saw above are perhaps a bit contrived,
 as they merely involved replicating existing monads. In practice, we
 often use free monads to abstract over complicated effects, typically
-those in IO. Let us look at some use cases. By the constraints of
+those in IO. Let us look at some use cases. Given the constraints of
 these notes, they will still be somewhat contrived (we can't fit an
 actual production system here), but they will be more interesting than
 spelling `State` in a new way.
@@ -1615,11 +1294,10 @@ definition
 ```Haskell
 {{#include ../haskell/Week4/StateMonads.hs:tick}}
 ```
-
-mentions no implementation of state at all, and we can run it four ways:
+mentions no implementation of state at all, and we can run it five ways:
 
 ```
-> runFState tickF 0                -- pure state threading
+> runState 0 tickF                 -- pure state threading
 (0,1)
 > newIORef 0 >>= runIState tickI   -- a mutable IORef
 0
@@ -1636,9 +1314,9 @@ choosing its type chooses the implementation. The last two use the free
 monad: `tickFree` is a concrete *data structure*, and choosing the
 interpreter chooses the implementation.
 
-The difference between the two methods only becomes visible when you want to
+The difference between the two methods only becomes visible when we want to
 do something with the computation other than run it. `tickF` is a function:
-the only thing to be done with it is to pass it to `runFState`, and the pair
+the only thing to be done with it is to pass it to `runState`, and the pair
 that comes back is everything observable — which operations ran, and in what
 order, cannot be recovered from it. `tickFree` is a value you can pattern match
 on, store in a list, count the operations of, interpret twice and compare,
@@ -1648,8 +1326,7 @@ the interface never mentions.
 
 ### An Uncontrived Real World Example
 
-To start out with, let us consider one of the most interesting and
-useful functions, the recursive Fibonacci function:
+To start with, let us consider the recursive Fibonacci function:
 
 ```Haskell
 fib :: Int -> Int
@@ -1664,47 +1341,47 @@ logging system. In particular, logging typically requires IO, and we
 don't want every single function to live in the `IO` monad. Free
 monads are a handy way to abstract out the notion of logging. Let us
 define a type `FibOp` that encapsulates the effects that we need in
-our `fib` function; currently restricted to merely logging.
+our `fib` function, currently restricted to merely logging.
 
 ```Haskell
 data FibOp a = FibLog String a
 
 instance Functor FibOp where
-  fmap f (FibLog s c) = FibLog s (f c)
+  fmap f (FibLog s c) = FibLog s $ f c
 ```
 
 Now we can define a `FibM` monad that supports `FibOp` effects, with
-an accessor function `fibLog`:
+a function `fibLog` that performs a single logging step:
 
 ```Haskell
 type FibM a = Free FibOp a
 
 fibLog :: String -> FibM ()
-fibLog s = Free (FibLog s (Pure ()))
+fibLog s = Free $ FibLog s $ Pure ()
 ```
 
-And finally we can use it in our definition of `fib`:
+Finally we use it in a monadic definition of `fib`:
 
 ```Haskell
 fib :: Int -> FibM Int
-fib 0 = return 1
-fib 1 = return 1
+fib 0 = pure 1
+fib 1 = pure 1
 fib n = do
   fibLog ("fib(" ++ show n ++ ")")
   x <- fib (n - 1)
   y <- fib (n - 2)
-  return (x + y)
+  pure $ x + y
 ```
 
 One of the interesting parts of the `FibM` monad is that there are
 many legitimate and interesting ways to interpret it (in contrast to
-`Reader` or `State`, which have only a single sensible
+`Reader` or `State`, which have only one sensible
 interpretation). One obvious one is to interpret it in the `IO` monad,
 where the logging messages are printed as lines:
 
 ```Haskell
 ioFibM :: FibM a -> IO a
-ioFibM (Pure x) = return x
+ioFibM (Pure x) = pure x
 ioFibM (Free (FibLog s x)) = do
   putStrLn s
   ioFibM x
@@ -1775,7 +1452,7 @@ Appending would both reverse the order and make logging cost quadratic time
 in the number of messages. If you do need to build a list from the far end,
 either accumulate in reverse and `reverse` once at the end, or use a data
 structure with cheap appending. This is orthogonal to the issue of free
-monads, but it is a very easy mistake to make in an interpreter.
+monads, but it is an easy mistake to make in an interpreter.
 ~~~
 
 ### Adding Another Effect
@@ -1792,7 +1469,7 @@ One way to improve the performance of recursive computations with many
 shared subresults is *memoisation*, where we maintain a cache mapping
 function arguments to results. Then, whenever we encounter an argument
 we have seen before, we merely retrieve the result that was computed
-last time again.
+last time.
 
 Memoisation is notoriously inconvenient to implement in pure
 languages, because of the need to maintain a state. The idea behind
@@ -1800,8 +1477,8 @@ memoisation is that the effect of the cache is not *observable*, but
 merely speeds up the computation, but Haskell does not know that.
 Instead, we have to manually manage the cache of previous results,
 which raises additional questions, such as when to expire cache
-entries in order to avoid space leaks. It's a rather complicated
-space, and intermingling memoisation logic with algorithmic logic is
+entries in order to avoid space leaks. This is a rather complex
+design space, and intermingling memoisation logic with algorithmic logic is
 likely to result in a mess.
 
 Instead, let us augment the `FibM` monad to handle memoisation. First,
@@ -1816,7 +1493,7 @@ data FibOp a
 The `FibMemo` constructor has three components:
 
 1. An integer `n` denoting that this effect refers to the result of
-   computing `fib(n)`.
+   computing `fib n`.
 
 2. A `FibM Int` computation that computes `fib(n)` if executed.
 
@@ -1824,34 +1501,32 @@ The `FibMemo` constructor has three components:
    the computation stored in the `FibM Int` - or a memoised version if
    available.
 
-The instance definition and the accessor functions are fairly
-straightforward; strongly resembling those we have seen before.
+The instance definition for `FibOp` as a functor is straightforward, resembling those we have seen before.
 
 ```Haskell
 instance Functor FibOp where
-  fmap f (FibLog s c)    = FibLog s (f c)
-  fmap f (FibMemo n m c) = FibMemo n m (f . c)
+  fmap f (FibLog s c)    = FibLog s $ f c
+  fmap f (FibMemo n m c) = FibMemo n m $ f . c
 
 fibMemo :: Int -> FibM Int -> FibM Int
-fibMemo n m = Free (FibMemo n m Pure)
+fibMemo n m = Free $ FibMemo n m Pure
 ```
 
-The idea behind `fibMemo` is that we use it to wrap a computation, for
-example like so:
+The idea behind `fibMemo` is that we use it to wrap a computation. 
 
 ```Haskell
 fib :: Int -> FibM Int
-fib 0 = return 1
-fib 1 = return 1
-fib n = fibMemo n (do
+fib 0 = pure 1
+fib 1 = pure 1
+fib n = fibMemo n $ do
   fibLog ("fib(" ++ show n ++ ")")
   x <- fib (n - 1)
   y <- fib (n - 2)
-  return (x + y))
+  pure $ x + y
 ```
 
 The operational idea is that whenever the `fib n` case is reached, we
-want to look if an existing result for `n` has already been computed.
+want to check whether an existing result for `n` has already been computed.
 If so, we return it. If not, we compute the result using the provided
 computation. Of course, whether that is *actually* what happens
 depends on how we write our interpreter function for `FibM`. For
@@ -1879,7 +1554,7 @@ could also be implemented using the `State` monad, as the way we handle the
 cache is identical to how `State` handles state.
 
 Now even large applications of `fib` finish almost instantaneously, as
-memoisation transforms the exponential number of recursive calls to a linear
+memoisation transforms the exponential number of recursive calls into a linear
 number of recursive calls:
 
 ```
@@ -1895,7 +1570,7 @@ perhaps with limitations on the maximum size of stored results, or
 some expiry policy that removes entries after a time. All of these
 changes can be made without modifying `fib` itself.
 
-Another useful change would be to allow memoisation of arguments and results
+Another useful change is to allow memoisation of arguments and results
 that are not exclusively of type `Int` (or some other fixed type), or to use a
 more efficient data structure than a list to store the cache. This is not
 particularly difficult, although somewhat more verbose, and so we have left it
@@ -1932,7 +1607,7 @@ into our systems would make them useless in practice. At any given
 time, many computations may be suspended waiting for events to happen;
 some of them perhaps waiting for the same events.
 
-To support his style of programming, we define an effect type for our
+To support this style of programming, we define an effect type for our
 asynchronous programming model, with support for two effects:
 
 1. Waiting for an event of a given name.
@@ -1948,27 +1623,22 @@ The definition, along with its `Functor` instance, is as follows:
 ```
 
 And it is all packed together under the name `EventM` with two
-accessor functions `waitFor` and `logMsg`:
+functions `waitFor` and `logMsg`:
 
 ```Haskell
 {{#include ../haskell/Week4/FreeAsync.hs:waitFor_logMsg}}
 ```
 
 Here are three examples of how to use the monad. All of these
-functions listen for events and do something (fairly trivial) with the
+functions listen for events and do something fairly simple with the
 result. The purpose of the `divider` example is solely to illustrate
-that control flow and looping is possible.
+that control flow and looping are possible.
 
 ```Haskell
 {{#include ../haskell/Week4/FreeAsync.hs:processes}}
 ```
 
-Once you have finished with this section, and you have seen how the
-sausage is made, we suggest returning to these definitions and note
-how *normal* they look. The complexity of how they are actually
-executed is completely hidden by the monad abstraction.
-
-A definition such as `adder` represents a *process*. It runs for as
+A definition such as `adder` represents a *process*. It runs as
 far as possible until the value of an event is needed, at which point
 it is suspended. We can write an interpretation function that does
 just that; evaluating as many of the effects as possible until
@@ -1994,7 +1664,7 @@ a :: EventM ()
 ```
 
 Unfortunately we cannot inspect its *structure*, because `EventOp` is
-not an instance of `Show`, but we can be pretty sure it is currently
+not an instance of `Show`, but we can be sure it is 
 stuck on a `WaitFor` effect.
 
 At some point, an event may arrive. We can then check whether the
@@ -2030,9 +1700,9 @@ about the details.
 This is often called an *event pump*, by analogy to old-fashioned
 water pumps. We continue cranking the handle (calling
 `deliver`), which lets the process continue through its
-execution. The interesting thing is that the suspended computations,
-the `a`, `b`, and `c` values above, are ordinary Haskell values, that
-we can manipulate like any other Haskell value. One slightly dubious
+execution. Note that the suspended computations,
+the `a`, `b`, and `c` values above, are ordinary Haskell values, which
+we can manipulate like any other Haskell values. One potentially dubious
 thing we can do is to keep reusing the same suspended computation
 multiple times:
 
@@ -2045,12 +1715,11 @@ multiple times:
 1 + 2 = 3
 ```
 
-Another more useful thing we can do is to keep *multiple* suspended
-processes in a list. Whenever an event arrives, we crank the pump once
-on each of them, and `deliver` leaves alone every process that is not
-waiting for this particular event — including one that has already
-finished, which is a `Pure` value that no event matches. So the whole
-pump is one recursive function over the list of events:
+A useful extension is keeping *multiple* suspended
+processes in a list. Whenever an event arrives, we deliver 
+it to each of them, where every process that is *not*
+waiting for this particular event just ignores it.  So the whole
+pump is a recursive function over the list of events:
 
 ```Haskell
 {{#include ../haskell/Week4/FreeAsync.hs:runEventM}}
@@ -2083,7 +1752,7 @@ Cannot divide by zero
 
 As an example that truly demonstrates how decoupled the processes are
 from how events are read, the following function reads events
-interactively from the console, through the the `readLn` function
+interactively from the console, through the `readLn` function,
 which reads a value in Haskell syntax.
 
 ```Haskell
@@ -2091,7 +1760,7 @@ which reads a value in Haskell syntax.
 ```
 
 Here is an example of using it, where the output from the processes is
-intermixed with my typed input:
+intermixed with typed input:
 
 ```
 > interactivelyRunEventM [adder, multiplier, divider]
