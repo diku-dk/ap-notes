@@ -72,7 +72,7 @@ Note that *user* and *implementor* are roles; they are frequently the same
 person on different days.
 
 What happens if specification and implementation are inconsistent, as shown by a
-failing test? There are three possible repairs, with very different costs:
+failing test? There are three possible repairs:
 
 * Change the code to meet the specification. Requires no negotiation with users.
 * Change the specification to meet the code. Requires negotiation, because the
@@ -80,10 +80,18 @@ failing test? There are three possible repairs, with very different costs:
 * Change both. This is a natural part of *exploratory* programming, while the
   requirements are still being worked out.
 
-The most common problem in practice is that modules are *underspecified*: a user
-experiments with the implementation and comes to rely on behaviour that was never
-promised; the implementor later changes that behaviour; and the resulting errors
-are both hard to detect and hard to localise.
+The most common problem in practice is that modules are *underspecified*: there is
+too little information for a user. So the user experiments with the implementation
+and comes to rely on behaviour that was never specified. The implementor later
+changes that behaviour, and the change manifests itself as errors in the user's
+code that had not been observed before.
+
+Localising the cause of such an error is not merely difficult: attributing it to
+either the implementation or the use of a module is *ill-defined* without a clear
+module specification. The implementor may have one interface in mind, which may be
+as useless as "whatever my code does in any given version, user beware", and the
+user may have another, which may be as useless as "whatever a previous version of
+the module did, or whatever I think it should do when my code uses it".
 
 ### What testing is - and is not
 
@@ -98,8 +106,8 @@ It is worth separating three activities that are often all called "testing":
 
 * **Formal verification**: a mathematical proof that there exists *no* valid
   input leading to a specification violation.
-* **Testing**: the systematic discipline of finding nasty inputs that maximise
-  the chance of finding a violation. Failing to break the code is taken as
+* **Testing**: the systematic discipline of finding "nasty" inputs that maximise
+  the chance of finding a violation *quickly*. Failing to break the code is taken as
   *evidence* - not proof - that the code may be correct with respect to the given
   specification.
 * **Trying out**, *illustrating*, *exemplifying*: running the code on some inputs
@@ -112,14 +120,37 @@ you are *systematically* looking for violations of the former by the latter. Say
 "illustrate", "exemplify" or "try out" instead.
 ~~~
 
-Finally, a note on terminology for the different scopes of testing. *Unit
-testing* is testing a module implementation against its module specification; a
-*unit* here corresponds to a module, and its bespoke dependencies are stubbed
-out. *Integration testing* tests a composition of modules against the
-specification of the resulting component. *System testing* tests a deployable
-system against its specification, and *acceptance testing* tests it against
-business and user requirements. Everything in this chapter is about unit testing,
-although the model-based technique at the end scales to much larger systems.
+Finally, a note on terminology for the different scopes of testing. 
+
+*Unit testing* is testing a unit of code against its specification. Here a *unit*
+typically corresponds to a module with a number of related types and functions. In
+unit testing the unit's dependencies are stubbed out. This is to ensure that a
+specification violation observed during unit testing can be attributed to the unit
+itself, and not to an error in the code it depends on. Suppose, for example, that
+code in the unit calls a function of an auxiliary module `M` in a way that
+violates that function's precondition, and that this *does not* lead to an
+observable error. It *is* an error in the unit nonetheless, and a stubbed
+implementation of the function should flag it during testing. Why is it an error
+in the unit? Because the function's *specification* promises correct behaviour
+only when the precondition is satisfied. On inputs that violate it the function may
+do anything at all---and the implementor may change what it does at will between
+versions.
+
+*Integration testing* tests a composition of modules against the specification of
+the resulting *component*. The most common and easiest form is *bottom-up
+integration testing*: testing one or more modules together with all the modules
+they depend on. This essentially treats the entire component as a single (big)
+"unit".
+
+*System testing* tests a deployable system against its system specification. It
+essentially treats the entire system as a single (huge) "unit" of code and data.
+
+Finally, *acceptance testing* tests a deployed system in its target execution
+environment against business and user requirements, including usability and
+integration into the work flow.
+
+This chapter is primarily about property-based testing of small units, and
+model-based testing of larger (sub)systems.
 
 ## Properties
 
@@ -136,7 +167,7 @@ or, when the property only applies to some inputs,
 A *partial formal specification* is typically a conjunction of such properties.
 
 When we discussed type classes in [Chapter 1](chapter_1.html#type-class-laws) we
-met the concept of *laws*, which are exactly properties that must hold for
+met the concept of *laws*, which are properties that must hold for
 instances of a given type class. For instance, if a type `T` is an instance of
 `Eq` we expect `x == x` to evaluate to `True` for every value `x :: T`.
 
@@ -162,20 +193,47 @@ cases, e.g.
 {{#include ../haskell/Week5/Properties.hs:TediousTest}}
 ```
 
-and test with something like `all (\(xs, ys) -> prop_lengthAppend xs ys)
-tediousTestCases`, but this is quite tedious. QuickCheck automates the tedium away
-by generating (somewhat) random inputs. The workhorse is `quickCheck`, which
-accepts something `Testable` (explained below) and runs it with a number of
-different inputs. Simply running `quickCheck prop_lengthAppend` covers more cases
-than any unit test suite we would realistically have the patience to maintain.
-The default is 100 tests, but if we want more we can run e.g.
+and test the universal statement with `all (\(xs, ys) -> prop_lengthAppend xs ys)
+tediousTestCases`. This simple-minded brute-force method does not work when the
+input domain is infinite (here, all pairs of lists) or merely very large (for
+example, all 64-bit floating-point numbers).
+
+*Property-based testing* is a *specification-driven* testing method. Its point of
+departure is a conjunction of *properties* that the code must satisfy. A property
+usually has the form of a universally quantified statement
+
+\\[ \forall x_1, \ldots, x_k \,.\, P(x_1, \ldots, x_k) \Rightarrow Q(x_1, \ldots, x_k). \\]
+
+By inspection of the property, a test engineer then constructs an *enumeration* of
+values \\(v_0, v_1, \ldots\\), where \\(v_i = (v_{i1}, \ldots, v_{ik})\\), such that
+
+1. \\(P(v_i)\\) is guaranteed to hold;
+2. if there exists a \\(v\\) with \\(P(v)\\) and \\(\neg Q(v)\\), then at least one such
+   \\(v\\) occurs in the enumeration, and as early as possible;
+3. the \\(v_i\\) are efficient to construct.
+
+These objectives can be combined into one: enumerate candidate values that can
+falsify the property efficiently, and enumerate them in decreasing order of the
+likelihood that they do so.
+
+QuickCheck is a programming framework that provides functions for constructing
+such enumerations, primarily by generating pseudo-random numbers and mapping these
+to values of the desired type. The workhorse is `quickCheck`. It accepts what
+QuickCheck calls a *property*: a logical property like the one above, wired
+together with a *specific enumeration* of the \\(v_i\\) as a lazy stream. Running
+`quickCheck prop_lengthAppend` evaluates the underlying logical property on the
+first 100 elements of the enumeration that the property comes with. If we want a
+different number we can say so explicitly, e.g.
 
 ```Haskell
 quickCheck $ withMaxSuccess 10000 prop_lengthAppend
 ```
 
-Of course, no amount of test cases is enough to argue total correctness, but
-tuning the number of tests allows us to trade time for certainty.
+Tuning the number of tests allows us to trade testing time for certainty: more
+test data increases the chance of finding a specification violation. For an
+infinite domain, however, no number of tests can prove the *absence* of a
+violation, and hence none can establish correctness of the code with respect to
+the property.
 
 ### Counterexamples
 
@@ -201,22 +259,14 @@ _ + _ = 0
 _ ++ _ = []
 ```
 
-the property would still hold. The crucial observation is that in practice code
-is seldom wrong in ways that happen to not violate any properties. Therefore
-observing that a number of non-trivial properties involving some function are
-true is a good proxy for correctness of the function.
-
-But if properties are merely good proxies for correctness, why is that better
-than testing correctness directly? The reason is that many properties are like
-the ones we have seen so far: they can be expressed as a boolean condition with
-variables that should hold for all choices of those variables. This is easy to
-test using QuickCheck or similar systems. Direct testing is harder to automate.
-That would require producing many test cases like `[] ++ [] == []` and `[1, 2] ++
-[3, 4] == [1, 2, 3, 4]` and so on, which is manual (and error-prone) work.
+the property would still hold. The crucial---and, once stated, obvious---
+observation is that the more of the requirements we capture as *testable
+properties*, the easier it becomes to demonstrate that a piece of candidate code
+is buggy.
 
 ### Where properties come from
 
-Coming up with properties is the genuinely difficult part of property-based
+Coming up with testable properties is the genuinely difficult part of property-based
 testing, and it is a skill that improves with practice. The following catalogue
 of recurring patterns is a good place to start when staring at a fresh module.
 
@@ -239,9 +289,12 @@ The invariant is that the result is sorted whenever the input is:
 {{#include ../haskell/Week5/Properties.hs:Prop_InsertSorted}}
 ```
 
-The `(==>)` operator constructs a *conditional property*: test cases that do not
-satisfy the precondition are *discarded* rather than counted as successes. We
-shall see below that this innocent-looking property has a serious problem.
+The `(==>)` operator expresses an *implication*, that is a *conditional property*.
+Logically, a conditional property holds if the precondition (its left-hand side) is
+*false*, or the postcondition (its right-hand side) is *true*. Operationally, test
+cases that do not satisfy the precondition are *discarded*, since there is no need
+to check the postcondition for them. We shall see below that this innocent-looking
+property has a serious problem.
 
 **Round-trip (inverse) properties.** Whenever a module offers two functions that
 are supposed to undo each other - encode and decode, serialise and deserialise,
@@ -251,13 +304,12 @@ print and parse - their composition should be the identity:
 {{#include ../haskell/Week5/Properties.hs:Prop_ShowRead}}
 ```
 
-This pattern is extremely productive. The printer and parser from
-[Chapter 3](chapter_3.html) are a case in point, and you will be asked to
-exploit it in the assignment.
+This pattern is very useful. The printer and parser from
+[Chapter 3](chapter_3.html) are a case in point.
 
-**Comparison against a reference implementation.** If a simple, obviously correct
+**Consistency with a reference implementation.** If a simple, obviously correct
 but perhaps hopelessly inefficient implementation is available, it can serve as
-an *executable specification* for a clever one. Here is a merge sort:
+an *executable specification*. Here is a merge sort:
 
 ```Haskell
 {{#include ../haskell/Week5/Properties.hs:Msort}}
@@ -268,22 +320,48 @@ and here is its specification, in terms of the standard library's `sort`:
 ```Haskell
 {{#include ../haskell/Week5/Properties.hs:Prop_Msort}}
 ```
+A simplified or partial executable specification is also called a *model* in
+software engineering discourse, giving rise to the terms *model-based testing
+(MBT)* and *software under test (SUT)*. A model is usually easier to come by than
+a logical specification, requires no background in logic, and remains practical
+even for large systems. MBT is consequently a very useful---and very common---form
+of specification-driven testing in industrial practice, and the last part of this
+chapter is devoted to it.
 
-This is the single most useful pattern in industrial practice, and the whole of
-the last part of this chapter is devoted to a generalisation of it.
+**Metamorphic properties.** Sometimes we cannot say what the right answer *is*,
+but we can say how the answers of *several runs of the same function* must relate
+to each other. For example, for all `xs` and `ys`,
 
-**Metamorphic properties.** Sometimes we do not know what the right answer *is*,
-but we do know how the answer must change when we change the input. Such
-properties relate two runs of the same function:
+```Haskell
+msort (xs ++ ys) = msort (ys ++ xs)
+```
+
+says that `msort` ignores the order in which two lists are concatenated, without
+saying anything about what either result is. It is expressed by
+`prop_msortAppend`:
 
 ```Haskell
 {{#include ../haskell/Week5/Properties.hs:Prop_MsortMetamorphic}}
 ```
 
-They are invaluable when there is no reference implementation to compare against.
+Metamorphic properties are a special case of *relational* properties, which
+constrain the results of runs of *one or more* functions on the same or related
+inputs. When the two functions are different, a relational property compares two
+implementations. For example, if `qsort` is a second sorting function, then for
+all `xs`,
+
+```Haskell
+qsort xs = msort xs
+```
+
+says that the two agree everywhere, without saying what either of them computes.
+This is the essence of the model-based testing described above: the reference
+implementation is one of the two functions.
 
 **Postconditions.** A weaker but still useful pattern: state what must be true of
-the output, without pinning it down completely.
+the output `f x`---possibly in relation to the input `x`---without pinning the
+output down completely. Such properties are also called *direct* or *oracle-based*
+properties. For example,
 
 ```Haskell
 {{#include ../haskell/Week5/Properties.hs:Prop_MsortPost}}
@@ -298,7 +376,7 @@ specified.
 ## The `Testable` type class
 
 The `quickCheck` function works on any type which is an instance of `Testable`.
-The primary instances and their semantics for testing are worth going over:
+The primary instances and their semantics for testing are as follows:
 
 * `()` is testable and succeeds if it returns `()` (the only possible value of
   the type `()`) and fails if an exception occurs.
@@ -342,7 +420,7 @@ withMaxSuccess :: Testable prop => Int -> prop -> Property
 ```
 
 `(===)` deserves special mention. It behaves like `(==)`, but when the test fails
-it prints *both* values, which is almost always what you want:
+it prints *both* values, which is almost always what one wants:
 
 ```Haskell
 {{#include ../haskell/Week5/Properties.hs:Prop_LengthAppendEq}}
@@ -374,15 +452,14 @@ your own.
 
 ## Generators and `Arbitrary`
 
-So far we have relied on QuickCheck automatically coming up with values for our
-properties. The mechanism behind this is the `Arbitrary` type class alluded to
-above, which defines a method `arbitrary :: Gen a` that is supposed to define the
-"canonical" generator for the type. Hence, we first need to understand
-generators.
+So far we have relied on QuickCheck to come up with values for our properties
+automatically. The mechanism behind this is the `Arbitrary` type class alluded to
+above, which provides a method `arbitrary :: Gen a` giving the "canonical"
+generator for the type. Let us first understand generators.
 
 ### Generator basics
 
-As a first approximation the type `Gen a` represents a probability distribution
+Intuitively, type `Gen a` represents a probability distribution
 over elements of `a`. It can also be thought of as a computation that can depend
 on random choices. Concretely it is essentially
 
@@ -390,11 +467,13 @@ on random choices. Concretely it is essentially
 newtype Gen a = MkGen { unGen :: QCGen -> Int -> a }
 ```
 
-that is, a function from a pseudo-random seed and a *size* parameter to a value.
-The seed is threaded through in the style of a state monad, and the size is
-available in the style of a reader monad; both are managed by QuickCheck, and
-generators are built from primitives and monad operations rather than by
-manipulating them directly.
+which is a state-like monad. A generator is a function from the current state of
+a pseudo-random number generator---confusingly, but conventionally, called a
+*seed*---and a *size* parameter to a value. The seed is threaded through in the
+style of a state monad, using operations that produce a new seed, or a pair of
+new seeds, from a given one; the size is available in the style of a reader
+monad. Generators are built from primitives and monad operations rather than by
+manipulating seed and size directly.
 
 The simplest generator is `pure x` which produces the value `x` with probability
 1. Given a list of generators `gs :: [Gen a]` the generator `oneof gs` chooses one
@@ -419,16 +498,18 @@ example. Its sibling `sample' :: Gen a -> IO [a]` returns the values instead of
 printing them, and `generate :: Gen a -> IO a` produces a single one.
 
 ~~~admonish tip
-Whenever you write a non-trivial generator, run `sample` on it. It takes five
-seconds and it will save you hours. Later in this chapter we shall see how to
+Whenever you write a non-trivial generator, run `sample` on it. It takes a few
+seconds and it may save you hours of debugging. Later in this chapter we shall see how to
 automate the same sanity check so that it runs as part of your test suite.
 ~~~
 
 ### Recursive generators
 
-QuickCheck has a combinator called `listOf` which generates `[a]` given a
-generator for `a`. Let us generate a list of integers using the standard integer
-generator given by its `Arbitrary` instance. An example output is:
+A *generator combinator* is a function that maps one or more generators to a
+generator. QuickCheck has a generator combinator called `listOf` that generates
+`[a]` given a generator for `a`. Let us generate a list of integers using the
+standard integer generator given by its `Arbitrary` instance. An example output
+is:
 
 ```
 > sample $ listOf (arbitrary :: Gen Integer)
@@ -476,8 +557,11 @@ Alas, the distribution leaves something to be desired:
 ```
 
 Every other sample is an empty list and long lists are exceedingly unlikely,
-which makes this generator inefficient for exploring the search space. A second
-attempt might be to use `frequency` to introduce a bias towards longer lists:
+which makes this generator inefficient for exploring the search space. Re-testing
+a value we have already tried is wasted effort: the property is a deterministic
+function of its input, so a repeated test case can never tell us anything new.
+
+A second attempt might be to use `frequency` to introduce a bias towards longer lists:
 
 ```Haskell
 {{#include ../haskell/Week5/Properties.hs:List2}}
@@ -533,8 +617,8 @@ Now the distribution is similar to QuickCheck's `listOf`.
 ### Size-dependent generators
 
 Why did `list3` work? Because `arbitrary :: Gen Int` respects the *size*
-parameter, and `list3` inherits that behaviour by accident. It is better to be
-explicit about it.
+parameter, and `list3` more or less accidentally inherits that behaviour. 
+It is better to be explicit about it.
 
 When testing a property it is often a good idea to start with small values and
 then gradually increase the complexity of the test cases. QuickCheck uses this
@@ -563,11 +647,11 @@ If your property-based test suite suddenly stops terminating, an unbounded
 generator is the first thing to suspect.
 ~~~
 
-### Generating functions
+### Function generators
 
-Some properties quantify over *functions*, not just over data. The functor law
-`fmap (f . g) == fmap f . fmap g` is an example. QuickCheck can generate
-functions, print them, and even shrink them, via the `Fun` modifier:
+Some properties quantify over *functions*, not just over first-order data. The
+functor law `fmap (f . g) == fmap f . fmap g` is an example. QuickCheck can
+generate functions, print them, and even shrink them, via the `Fun` modifier:
 
 ```Haskell
 applyFun :: Fun a b -> (a -> b)
@@ -575,47 +659,85 @@ applyFun :: Fun a b -> (a -> b)
 
 A property taking a `Fun a b` argument receives a random function that QuickCheck
 knows how to display as a finite table of input/output pairs, which makes
-counterexamples readable. The type `a` must be an instance of `CoArbitrary` and
-`Function`, both of which can be derived for most types. We use this facility in
-the next section.
+counterexamples readable. The argument type `a` must be an instance of
+`CoArbitrary` and `Function`; both can be derived for most types, and we shall
+not go into how.
 
 ## Testing an abstract data type against a reference implementation
 
 We now have enough machinery to attack a realistic specification problem. Recall
-from [Chapter 2](chapter_2.html#the-state-monad) the state monad. An *abstract
-data type* (ADT) is an abstract type together with operations on it and a precise
-description of what those operations do. The state monad is a good example,
-because it has (at least) two quite different implementations: a purely
-functional one that threads the state explicitly, and an imperative one built on
-an `IORef` as introduced in [Chapter 4](chapter_4.html#io-references).
+that an *abstract data type* (ADT) is a declaration of a possibly parameterised
+type, type signatures of operations involving that type, and properties the
+operations must satisfy. An *implementation* of the ADT consists of definitions of
+the type and the operations such that the properties are satisfied.
+
+In Haskell an ADT is commonly declared by a class declaration, and an
+implementation by an instance declaration. The properties belong to the class
+declaration. They are usually just documentation, because Haskell checks
+statically that an instance provides the correctly *typed* operations, but has no
+built-in facility for verifying that an implementation satisfies the stipulated
+properties. This is where property-based testing plays a key role: the class
+properties provide the specification against which an instance is tested.
+
+Recall the `StateMonad` class from
+[Chapter 4](chapter_4.html#subclasses-of-monads), an ADT with the standard monad
+laws and the three state laws put-get, put-put and get-put.
 
 ```Haskell
-{{#include ../haskell/Week5/Properties.hs:FState}}
+{{#include ../haskell/Week4/StateMonads.hs:StateMonad}}
+```
+
+Let us consider the two state monads `State` from
+[Chapter 2](chapter_2.html#the-state-monad) and `IState` from
+[Chapter 4](chapter_4.html#example-imperative-state-monad).
+
+```Haskell
+{{#include ../haskell/Week4/StateMonads.hs:State}}
 ```
 
 ```Haskell
-{{#include ../haskell/Week5/Properties.hs:IState}}
+{{#include ../haskell/Week4/StateMonads.hs:IState}}
 ```
 
-There are two standard ways of specifying such an ADT, and both are testable.
+We have called both of them state monads, in the sense of implementations of the
+`StateMonad` ADT. Their instance declarations (which we shall not repeat here; see
+Chapter 4) do provide the correctly typed operations---but do they satisfy the
+monad and state laws?
 
-### Method 1: equational laws
+There are two common ways of testing an ADT implementation.
+
+### Method 1: Testing the laws directly
 
 The first is to state *universal equational properties* that the operations must
-satisfy. Beyond the monad laws, a state monad should satisfy the following
-*get/put laws*, for all `s` and `t`:
+satisfy. Let us consider the state laws:
 
 ```Haskell
-put s >> get   =  put s >> return s
-put s >> put t =  put t
-get >> get     =  get
+put s >> get      =  put s >> pure s      -- put-get
+put s >> put s'   =  put s'               -- put-put
+get >>= put       =  pure ()              -- get-put
 ```
 
-To test these we need to say what the `=` means for two state computations. Two
-computations are equivalent exactly when they cannot be told apart by any
-observation, and the only observation we can make of an `FState s a` is to run it
-on an initial state and look at the resulting value and final state. So
-*observational equivalence* is:
+A fundamental question is what `=` means here. What does it mean for two
+computations to be equal? The most compelling answer is: they are equal when they
+are substitutable for each other in any *program context* without changing the
+*observable behaviour* of the program. In Haskell a program context can be taken to
+be a program of type `IO ()` with a "hole" into which an expression can be plugged.
+If plugging the hole with `e` or with `e'` has the same outcome in *every* program
+context, then `e` and `e'` are *observationally equivalent*. Taking observational
+equivalence as equality gives us exactly what we want from an equality:
+
+- it licenses replacing `e` by `e'` *wherever* `e` occurs in a program; and
+- conversely, if `e` and `e'` are intersubstitutable then they are "equal" in
+  precisely that sense.
+
+This notion of equality is the computational counterpart of what philosophers call
+*Leibniz equality*. Note that it *depends on the operations available in the
+contexts*: the fewer operations there are to distinguish two expressions, the more
+expressions are equal. For example, if there is no `run...` operation for "getting
+out of" a monad, then any two computations of the same monadic type are
+observationally equivalent. Conversely, if two computations behave the same when
+run, then they behave the same in all contexts. For the `State Int` monad we can
+therefore define observational equivalence as the QuickCheck property `(~=)`:
 
 ```Haskell
 {{#include ../haskell/Week5/Properties.hs:StateEquiv}}
@@ -623,36 +745,48 @@ on an initial state and look at the resulting value and final state. So
 
 Note what has happened here: the universal quantification over initial states has
 turned into a QuickCheck property, because `property` applied to a function
-generates the argument. We can now write the laws down directly:
+generates the argument. We can now turn the state laws into QuickCheck properties:
 
 ```Haskell
 {{#include ../haskell/Week5/Properties.hs:Prop_StateLaws}}
 ```
 
 ~~~admonish note
-`(~=)` is an *approximation* of observational equivalence: it only tries finitely
-many initial states, and it fixes the state type to `Int`. This is typical.
-Deciding equivalence of programs is undecidable in general; the whole point of
-testing is that a good approximation is cheap and a proof is expensive.
+`(~=)` is an *approximation* of observational equivalence for testing purposes: it
+tries only finitely many initial states, and it fixes the state type to `Int`. It
+is *sound* in the sense that observational equivalence implies `(~=)`; it is
+*incomplete* in the sense that `(~=)` does not imply observational equivalence.
+
+That is the right way round. Deciding observational equivalence of programs in a
+Turing-complete language is undecidable, so the point of testing is to find a
+*sound* approximation of an undecidable property: a failing test case then
+*proves* that the property does not hold. Being unable to find a failing test case
+*despite one's best efforts at finding one* is taken as supporting evidence---but
+never proof---that the property may hold after all.
 ~~~
 
-### Method 2: a reference implementation
+### Method 2: Testing against a reference implementation
 
-The second way to specify an ADT is to give a *reference implementation* (also
-called an executable specification or a model implementation) and require that
-the real implementation be observationally indistinguishable from it. Here
-`FState` plays the role of reference and `IState` the role of the implementation
-under test.
+The second way is to provide a *reference implementation* (also called an
+*executable specification* or *model*) and to require that the software under test
+(SUT) be observationally indistinguishable from it. The basic idea is this: if the
+reference implementation is correct, then so is the SUT. Sometimes the reference
+implementation *is* the specification.
 
-The two have different types, so we cannot compare them directly. We instead
-provide a conversion that runs an `IState` computation in the same way we run an
-`FState` computation, namely from an initial state to a value and a final state:
+Let us take `State Int` as the reference implementation and `IState Int` as the
+SUT. The two have different types, so we cannot compare them directly. We instead
+provide a way of running an `IState` computation that yields the same observation
+as running a `State` computation, namely an initial state mapped to a value and a
+final state:
 
 ```Haskell
 {{#include ../haskell/Week5/Properties.hs:RunIState}}
 ```
 
-Now "the implementation simulates the reference" is expressible:
+Note that Chapter 4's `runIStateFrom` will not do here: it discards the final
+state, which is precisely one of the two things we need to observe. With
+`runIStateFull` in hand, the property "the implementation *simulates* the
+reference" becomes expressible:
 
 ```Haskell
 {{#include ../haskell/Week5/Properties.hs:StateSimulates}}
@@ -664,18 +798,24 @@ and the specification of the implementation is a handful of one-line properties:
 {{#include ../haskell/Week5/Properties.hs:Prop_StateSimulates}}
 ```
 
-The last of these is where `Fun` earns its keep: `bindI` takes a *function* as its
+Observe that each of these properties mentions its program *once*: because `get`,
+`put` and `pure` are overloaded, the very same expression denotes a computation in
+`IState Int` on the left of `simulates` and in `State Int` on the right. Testing
+that an implementation simulates a reference implementation is, in this setting,
+just running one program under two instances of the same class.
+
+The last property is where `Fun` earns its keep: `(>>=)` takes a *function* as its
 second argument, so to test it at all we must generate one. `applyFun` turns the
 generated `Fun Int Int` into an ordinary function, and if the property fails
-QuickCheck prints the function as a readable table rather than as `<function>`.
+QuickCheck prints that function as a readable table rather than as `<function>`.
 
 ~~~admonish note
-`prop_simBind` only tests `bindI` at continuations of the very restricted shape
-`putI . f`. Testing `bind` for *arbitrary* continuations requires generating
-random *computations*, not just random functions - which means generating values
-of a datatype describing computations, and interpreting that datatype in both
-implementations. That is exactly the technique we develop in the last part of
-this chapter.
+`prop_simBind` tests `(>>=)` only at continuations of the very restricted shape
+`put . f`. Testing `(>>=)` for *arbitrary* continuations requires generating
+random *computations*, not just random functions---which means generating values
+of a datatype that describes computations, and interpreting that datatype in both
+implementations. That is exactly the technique we develop in the last part of this
+chapter.
 ~~~
 
 ## Test data design: partitioning and coverage
@@ -688,9 +828,9 @@ combine rather than compete.
 
 ### Input partitioning
 
-*Input partitioning* (also called *equivalence partitioning*) is a design method
-for constructing test data by inspecting the property to be checked. Given a
-universally quantified property, partition its valid inputs into a *finite* set of
+Specification-driven *input partitioning* (also called *equivalence partitioning*) 
+is a design method for constructing test data by inspecting the property to be
+checked. Given a universally quantified property, partition its valid inputs into a *finite* set of
 pairwise disjoint subsets whose union is the whole input space. From each
 partition, choose
 
@@ -709,8 +849,8 @@ For example, a generally useful partitioning of numeric types is:
   numbers, `{0}`, positive numbers, positive infinity, and NaN - remembering that
   `0.0` has two representations, and that NaN is not equal to itself.
 
-Note how most of the interesting values are boundary values, and note how
-unlikely a uniform random generator is to produce any of them.
+Note how most of the interesting values are boundary values that 
+a uniform random generator is unlikely to produce.
 
 ~~~admonish warning title="Test design is not the test suite"
 Specification-driven testing is the systematic, documented *process* of analysing
@@ -993,7 +1133,7 @@ The basic idea is a generalisation of the reference-implementation technique we
 applied to the state monad above. We take the so-called *software under test*
 (SUT) and construct a *model* that captures the most important properties of the
 SUT. In many cases a stateful system has implementation details that are important
-to its operation (such as caching, optimisations, persistency in a database,
+to its operation (such as caching, optimisations, persistence in a database,
 integration with other systems, etc), but which are not part of its external
 interface. A model is a program that imitates some subset of the behaviour of the
 SUT, and is typically much simpler than the SUT. We then randomly generate
@@ -1010,7 +1150,7 @@ technology for the SUT is constrained due to efficiency or integration concerns.
 
 ### A sample stateful system
 
-The SUT we will test in the following does happen to be implemented in Haskell for
+The SUT we will test in the following happens to be implemented in Haskell for
 simplicity, although we stress that this is not required for the approach to work.
 Specifically, our SUT is a datatype `DynamicArray a` that implements mutable
 arrays of elements of type `a` with efficient support for appending elements.
@@ -1040,7 +1180,7 @@ shown that appending an element can be done in amortised constant time.
 
 Because we need to modify both the number of used elements and the capacity, we
 represent these as mutable `IORef`s. The underlying array is an `IOArray Int a`,
-which is a mutable (but non-resizable) type provided by Haskell. The `Int` type
+which is a mutable (but non-resizable) array type provided by Haskell. The `Int` type
 argument is the index type, which can be used to represent multidimensional
 arrays, but we will not make use of this.
 
@@ -1132,7 +1272,7 @@ returns nothing, or a *query* that returns something and changes nothing, is kno
 as *command-query separation*. It is not a rule you must follow, but systems that
 respect it are markedly easier to test, because the observations are cleanly
 separated from the state transitions. If you find that a stateful system is
-painful to model, an operation that both mutates and reports is often the reason.
+painful to model, an operation that both mutates and reports a result is often the reason.
 ~~~
 
 We then define functions corresponding to executing each of the commands. Each
@@ -1398,15 +1538,17 @@ run each version twenty times, at the default 100 tests per run:
 | naive          | 7 out of 20              |
 | state-aware    | 20 out of 20             |
 
-A test suite that reports success two times out of three on code that is
-definitely broken is worse than no test suite at all, because it is believed. The
-coverage check is what tells you - *before* you rely on it - that your test data
-never reaches the code you care about.
+Test data that report success two times out of three on code that is definitely
+broken may be worse than no test data at all, because they give the impression of
+being a *test suite*---which is designed to maximise the likelihood of finding an
+error---when they are nothing of the sort. This is what the coverage requirement
+buys us: it tells us, *before* we come to rely on the tests, that our test data
+hardly ever reach the code we care about.
 
 ~~~admonish tip
-The general lesson is worth stating on its own: for a stateful system, the hard
-part is almost never writing the model, and almost always generating command
-sequences that reach interesting states. Budget your effort accordingly.
+For a stateful system, the hard part is rarely writing the model; it is test
+design---generating command sequences that reach the states in which errors
+manifest themselves. Budget your effort accordingly.
 ~~~
 
 ### Perspective
@@ -1423,12 +1565,12 @@ Haskell. The technique requires only that there is some handle representing the
 SUT (in our case, `DynamicArray`) and some operation (which may be in `IO`) that
 performs state changes based on `Command`s. There is nothing that fundamentally
 prevents us from testing a remote network service this way, or the control system
-for a robot, or a C library invoked through a foreign-function interface. We might
-in those cases need to write more complicated `exec` functions, of course.
+for a robot, or a C library invoked through a foreign-function interface. In these cases
+we might need to write more complicated `exec` functions, of course.
 
 Because the pattern is so stereotyped, it has been packaged into libraries -
-`quickcheck-state-machine` and `quickcheck-dynamic` are the well-known Haskell
-ones - which supply the generation, shrinking and reporting machinery so that you
+`quickcheck-state-machine` and `quickcheck-dynamic` are well-known Haskell
+libraries that supply the generation, shrinking and reporting machinery so that you
 need only provide the model, the commands, and the `exec` function. We have built
 it by hand here because the machinery is worth understanding, and because in
 practice you will frequently need to adapt it.

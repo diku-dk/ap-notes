@@ -1,8 +1,9 @@
 module Week5.Properties where
 
-import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import Data.IORef (newIORef, readIORef)
 import Data.List (sort)
 import Test.QuickCheck
+import Week4.StateMonads (IState (..), State, StateMonad (..), runState)
 
 -- ANCHOR: Prop_LengthAppend
 prop_lengthAppend :: [Integer] -> [Integer] -> Bool
@@ -248,95 +249,65 @@ prop_appendCommutative' (Pair xs ys) = xs ++ ys == ys ++ xs
 -- Testing an abstract data type against a reference implementation.
 -------------------------------------------------------------------------
 
--- ANCHOR: FState
-newtype FState s a = FState {runFState :: s -> (a, s)}
-
-getF :: FState s s
-getF = FState $ \s -> (s, s)
-
-putF :: s -> FState s ()
-putF s = FState $ \_ -> ((), s)
-
-returnF :: a -> FState s a
-returnF x = FState $ \s -> (x, s)
-
-bindF :: FState s a -> (a -> FState s b) -> FState s b
-bindF (FState m) f = FState $ \s ->
-  let (x, s') = m s in runFState (f x) s'
-
--- ANCHOR_END: FState
-
--- ANCHOR: IState
-type IState s a = IORef s -> IO a
-
-getI :: IState s s
-getI = readIORef
-
-putI :: s -> IState s ()
-putI s ref = writeIORef ref s
-
-returnI :: a -> IState s a
-returnI x _ = pure x
-
-bindI :: IState s a -> (a -> IState s b) -> IState s b
-bindI m f ref = do
-  x <- m ref
-  f x ref
-
--- ANCHOR_END: IState
+-- The StateMonad class, State and IState all come from Week4.StateMonads; we
+-- test the Week 4 implementations here rather than restating them.
 
 -- ANCHOR: RunIState
-runIState :: IState s a -> s -> IO (a, s)
-runIState m s = do
+-- Run an IState computation the way runState runs a State computation:
+-- from an initial state to a value AND a final state.  (Week 4's
+-- runIStateFrom discards the final state, which is exactly the part we
+-- need to observe here.)
+runIStateFull :: s -> IState s a -> IO (a, s)
+runIStateFull s c = do
   ref <- newIORef s
-  x <- m ref
+  a <- runIState c ref
   s' <- readIORef ref
-  pure (x, s')
+  pure (a, s')
 
 -- ANCHOR_END: RunIState
 
 -- ANCHOR: StateEquiv
 infix 4 ~=
 
-(~=) :: (Eq a, Show a) => FState Int a -> FState Int a -> Property
-m1 ~= m2 = property $ \s -> runFState m1 s === runFState m2 s
+(~=) :: (Eq a, Show a) => State Int a -> State Int a -> Property
+c1 ~= c2 = property $ \s -> runState s c1 === runState s c2
 
 -- ANCHOR_END: StateEquiv
 
 -- ANCHOR: Prop_StateLaws
 prop_putGet :: Int -> Property
-prop_putGet s = (putF s `bindF` \_ -> getF) ~= (putF s `bindF` \_ -> returnF s)
+prop_putGet s = (put s >> get) ~= (put s >> pure s)
 
 prop_putPut :: Int -> Int -> Property
-prop_putPut s t = (putF s `bindF` \_ -> putF t) ~= putF t
+prop_putPut s s' = (put s >> put s') ~= put s'
 
-prop_getGet :: Property
-prop_getGet = (getF `bindF` \_ -> getF) ~= getF
+prop_getPut :: Property
+prop_getPut = (get >>= put) ~= pure ()
 
 -- ANCHOR_END: Prop_StateLaws
 
 -- ANCHOR: StateSimulates
-simulates :: (Eq a, Show a) => IState Int a -> FState Int a -> Property
-mi `simulates` mf = property $ \s ->
+simulates :: (Eq a, Show a) => IState Int a -> State Int a -> Property
+c `simulates` r = property $ \s ->
   ioProperty $ do
-    r <- runIState mi s
-    pure $ r === runFState mf s
+    x <- runIStateFull s c
+    pure (x === runState s r)
 
 -- ANCHOR_END: StateSimulates
 
 -- ANCHOR: Prop_StateSimulates
 prop_simGet :: Property
-prop_simGet = getI `simulates` getF
+prop_simGet = get `simulates` get
 
 prop_simPut :: Int -> Property
-prop_simPut s = putI s `simulates` putF s
+prop_simPut s = put s `simulates` put s
 
-prop_simReturn :: Int -> Property
-prop_simReturn x = returnI x `simulates` returnF x
+prop_simPure :: Int -> Property
+prop_simPure x = pure x `simulates` pure x
 
 prop_simBind :: Fun Int Int -> Property
 prop_simBind fun =
-  (getI `bindI` (putI . f)) `simulates` (getF `bindF` (putF . f))
+  (get >>= put . f) `simulates` (get >>= put . f)
   where
     f = applyFun fun
 
