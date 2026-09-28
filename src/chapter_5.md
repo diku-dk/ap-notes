@@ -17,7 +17,7 @@ with the most valuable industrial application of the technique: testing
 
 ## Specification, implementation, verification
 
-Programming consists of three activities that are worth keeping apart:
+Programming consists of three activities that are important to keep apart:
 
 1. **Specification**: *What* is computed? Which functions exist, and which
    properties do they have?
@@ -804,7 +804,7 @@ Observe that each of these properties mentions its program *once*: because `get`
 that an implementation simulates a reference implementation is, in this setting,
 just running one program under two instances of the same class.
 
-The last property is where `Fun` earns its keep: `(>>=)` takes a *function* as its
+The last property is where `Fun` comes into play: `(>>=)` takes a *function* as its
 second argument, so to test it at all we must generate one. `applyFun` turns the
 generated `Fun Int Int` into an ordinary function, and if the property fails
 QuickCheck prints that function as a readable table rather than as `<function>`.
@@ -852,7 +852,7 @@ For example, a generally useful partitioning of numeric types is:
 Note how most of the interesting values are boundary values that 
 a uniform random generator is unlikely to produce.
 
-~~~admonish warning title="Test design is not the test suite"
+~~~admonish warning title="Test design is not just the test suite"
 Specification-driven testing is the systematic, documented *process* of analysing
 a specification to arrive at test data with high falsification power. The test
 suite is the *output* of that process. By itself a test suite says nothing about
@@ -1002,15 +1002,20 @@ as a machine-checkable requirement, and the generator is written to satisfy it.*
 The random generator then fills in the typical values within each partition for
 free.
 
-~~~admonish note title="Where implementation knowledge is allowed"
-Purists will object that peeking at the implementation is not specification-driven
-testing. The distinction that matters is this: the *expected output* must always
-come from the specification, never from the code - otherwise the test merely
-asserts that the code does what it does. But knowledge of the implementation may
-legitimately inform *which inputs we generate*, since a test case that never
-reaches a suspicious branch cannot possibly falsify anything. Deriving test data
-from the code in this way is called *structural* (or white-box) testing, and it
-complements rather than replaces specification-driven testing.
+~~~admonish note title="Where implementation knowledge comes in"
+Test design, which inputs to generate to falsify a given specification, can also
+be driven by peeking at the implementation.  It consists of deriving 
+a finite input partition such that each block exercises a certain set of control paths
+in the program, for example the then-branch of a conditional or iterating at least 
+once through a loop.  Its purpose is to ensure that the test data exercises each part
+of a program.  If some part is left unexercised an error could lurk in there.
+It critically important to keep in mind that you *still need a specification*.  Just 
+running code on data that exercise all parts of the code proves literally nothing about 
+the code if there is no specification.  The code does what it does--which is
+a tautology.  *Smoke testing* has the basic property 
+"does-not-crash*, which is extremely weak, but at least
+is a property to test against. It is useful in practice because almost all 
+specifications include the "does-not-crash" property. 
 ~~~
 
 ## Shrinking
@@ -1553,7 +1558,7 @@ manifest themselves. Budget your effort accordingly.
 
 ### Perspective
 
-You may rightly object that the amount of infrastructure needed to perform testing
+You may object that the amount of infrastructure needed to perform testing
 of this kind is rather large - our test harness is more lines of code than the
 `DynamicArray` implementation itself. This is a fair objection, but real systems
 tend to grow in complexity much faster than their models, so this is a technique
