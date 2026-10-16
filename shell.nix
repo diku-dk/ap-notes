@@ -18,5 +18,6 @@ pkgs.stdenv.mkDerivation {
     [
       mdbook
       mdbook-admonish
+      mdbook-pdf
     ];
 }
