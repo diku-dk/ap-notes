@@ -8,8 +8,8 @@ title = "Advanced Programming Course Notes"
 mathjax-support = true
 additional-css = ["./mdbook-admonish.css"]
 
-[output.pdf]
-optional = true
+#[output.pdf]
+#optional = true
 
 [preprocessor]
 
