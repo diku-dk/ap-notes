@@ -9,6 +9,7 @@ mathjax-support = true
 additional-css = ["./mdbook-admonish.css"]
 
 [output.pdf]
+optional = true
 
 [preprocessor]
 
