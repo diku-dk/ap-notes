@@ -28,7 +28,7 @@ case x of
 ```
 
 To make this more concise, we can use the `Functor` instance for
-`Maybe` that we saw last week:
+`Maybe` that we saw in the previous chapter:
 
 ```Haskell
 fmap (+1) x
@@ -96,6 +96,27 @@ Now we can write `f <*> x` rather than writing out the `case` by hand.
 Even better, this will work not just when `f` and `x` make use of
 `Maybe` specifically, but *any type* that is an applicative functor -
 and as we shall see, any monad is also an applicative functor.
+
+Applicative functors are subject to laws, just like normal functors. As always,
+they spell out fairly natural properties, even if the notation looks
+complicated:
+
+* **Identity**: `pure id <*> v = v`. Similar to the identity law for `Functor`,
+  this means that using `<*>` may not itself have any effect.
+
+* **Composition**: `pure (.) <*> u <*> v <*> w = u <*> (v <*> w)`. This is
+  essentially an associativity property, written in a slightly convoluted way to
+  make the types line up.
+
+* **Homomorphism**: `pure f <*> pure x = pure (f x)`. This property states that
+  "unnecessary" uses if `<*>` have no effect.
+
+* **Interchange**: `u <*> pure y = pure (\x -> x y) <*> u`. If only one of the
+  operands to `<*>` has a real effect, then we can flip them around.
+
+Together, these laws allow us to refactor code in natural ways. Usually we do
+not think consciously about them, as they are specified to fit our intuition
+about how programs execute.
 
 ## Monads
 
@@ -217,6 +238,35 @@ often also say that `f` is a *monadic function*. This is technically
 an abuse of nomenclature, but functions that "run within a specific
 monad" are such a common concept in Haskell that terse nomenclature is
 useful.
+
+## Monad laws
+
+Any instance of `Monad` must satisfy the following laws:
+
+* **Left identity**: `pure a >>= k = k a`. This states that "administrative"
+  uses of `pure` and `>>=` can be removed, or said another way, that they must
+  have no observable effect on their own. Intuitively, this is quite similar to
+  the identity laws for `Functor` and `Applicative`.
+
+* **Right identity**: `m >>= pure = m`. Same intuition as left identity.
+
+* **Associativity**: `m >>= (\x -> k x >>= h) = (m >>= k) >>= h`. This states
+  that the grouping of `>>=` must have no observable effect, in the same way
+  that function composition is associative.
+
+The associativity law is slightly easier to specify if instead of bind, we use
+the so-called "Kleisli arrow", that denotes composition of monadic functions:
+
+```Haskell
+(>=>) :: Monad m => (a -> m b) -> (b -> m c) -> a -> m c
+f >=> g = \x -> f x >>= g
+```
+
+Then the statement of associativity is simply:
+
+```
+(f >=> g) >=> h = f >=> (g >=> h)
+```
 
 ## Deriving `fmap` and `<*>`
 
