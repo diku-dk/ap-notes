@@ -1193,7 +1193,7 @@ unmodified if `p` fails. We must use it whenever a parser can fail
 lVar :: Parser String
 lVar = lexeme $ try $ do
   v <- some $ satisfy isAlpha
-  if False && v `elem` keywords
+  if v `elem` keywords
     then fail "keyword"
     else pure v
 
